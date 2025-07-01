@@ -1,0 +1,33 @@
+# Production scaling patches
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-api
+  namespace: mimir
+spec:
+  replicas: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-worker
+  namespace: mimir
+spec:
+  replicas: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-analytics
+  namespace: mimir
+spec:
+  replicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-web
+  namespace: mimir
+spec:
+  replicas: 3

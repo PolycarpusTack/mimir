@@ -1,0 +1,125 @@
+# Security Scanning Workflow for Mimir Enterprise
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily security scans at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install safety bandit semgrep
+        
+    - name: Run Mimir Security Scanner
+      run: |
+        python scripts/security_config.py scan --code --format json --output-dir reports/security
+        
+    - name: Run Safety (Dependency Vulnerability Check)
+      run: |
+        safety check --json --output reports/security/safety-report.json || true
+        
+    - name: Run Bandit (SAST)
+      run: |
+        bandit -r . -f json -o reports/security/bandit-report.json || true
+        
+    - name: Run Semgrep (Advanced SAST)
+      run: |
+        semgrep --config=auto --json --output=reports/security/semgrep-report.json . || true
+        
+    - name: Run comprehensive security audit
+      run: |
+        python scripts/security_config.py scan --full --output-dir reports/security
+        
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: reports/security/
+        retention-days: 30
+        
+    - name: Check for critical vulnerabilities
+      run: |
+        python -c "
+        import json
+        import sys
+        
+        try:
+            with open('reports/security/security_audit_summary.json', 'r') as f:
+                results = json.load(f)
+            
+            critical = results['components']['vulnerability_scan']['critical']
+            high = results['components']['vulnerability_scan']['high']
+            
+            print(f'Critical vulnerabilities: {critical}')
+            print(f'High severity vulnerabilities: {high}')
+            
+            # Fail if critical vulnerabilities found
+            if critical > 0:
+                print('❌ Critical vulnerabilities found! Please fix before merging.')
+                sys.exit(1)
+            elif high > 5:
+                print('⚠️  High number of high-severity vulnerabilities found.')
+                sys.exit(1)
+            else:
+                print('✅ Security scan passed.')
+        except Exception as e:
+            print(f'Error reading security results: {e}')
+            sys.exit(1)
+        "
+        
+    - name: Comment PR (if pull request)
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          try {
+            const results = JSON.parse(fs.readFileSync('reports/security/security_audit_summary.json'));
+            const critical = results.components.vulnerability_scan.critical;
+            const high = results.components.vulnerability_scan.high;
+            const total = results.components.vulnerability_scan.total_vulnerabilities;
+            
+            const body = `## 🔒 Security Scan Results
+            
+            | Severity | Count |
+            |----------|-------|
+            | Critical | ${critical} |
+            | High | ${high} |
+            | **Total** | **${total}** |
+            
+            ${critical > 0 ? '❌ **Critical vulnerabilities found!** Please review and fix before merging.' : ''}
+            ${high > 5 ? '⚠️ **High number of high-severity vulnerabilities.** Consider reviewing.' : ''}
+            ${critical === 0 && high <= 5 ? '✅ **Security scan passed.** No critical issues found.' : ''}
+            
+            📊 [View detailed security report](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+          } catch (error) {
+            console.log('Error posting security results:', error);
+          }

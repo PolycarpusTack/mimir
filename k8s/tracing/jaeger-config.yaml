@@ -1,0 +1,453 @@
+# Jaeger Configuration Files
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-collector-config
+  namespace: mimir-tracing
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: collector
+data:
+  jaeger-collector.yaml: |
+    # Jaeger Collector Configuration
+    
+    # Receiver configuration
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:14250
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+          thrift_compact:
+            endpoint: 0.0.0.0:14269
+          thrift_binary:
+            endpoint: 0.0.0.0:14270
+      zipkin:
+        endpoint: 0.0.0.0:9411
+    
+    # Processor configuration
+    processors:
+      batch:
+        timeout: 1s
+        send_batch_size: 1024
+        send_batch_max_size: 2048
+      
+      # Memory limiter to prevent OOM
+      memory_limiter:
+        limit_mib: 512
+        spike_limit_mib: 128
+        check_interval: 5s
+      
+      # Resource processor to add service metadata
+      resource:
+        attributes:
+        - key: cluster.name
+          value: mimir-prod
+          action: upsert
+        - key: deployment.environment
+          value: production
+          action: upsert
+      
+      # Sampling processor
+      probabilistic_sampler:
+        sampling_percentage: 10  # Sample 10% of traces
+      
+      # Span processor for filtering
+      span:
+        name:
+          # Include patterns
+          include:
+            match_type: regexp
+            regexp: ^(mimir|postgres|redis).*
+          # Exclude health checks
+          exclude:
+            match_type: regexp
+            regexp: .*(health|ping|readiness|liveness).*
+    
+    # Exporter configuration
+    exporters:
+      jaeger:
+        endpoint: elasticsearch.mimir-logging:9200
+        tls:
+          insecure: false
+          insecure_skip_verify: true
+        headers:
+          authorization: "Basic ${ES_AUTH_HEADER}"
+    
+    # Service configuration
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger, zipkin]
+          processors: [memory_limiter, resource, batch, probabilistic_sampler, span]
+          exporters: [jaeger]
+      
+      # Telemetry configuration
+      telemetry:
+        logs:
+          level: info
+        metrics:
+          level: basic
+          address: 0.0.0.0:8888
+    
+    # Extensions
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      pprof:
+        endpoint: 0.0.0.0:1777
+      zpages:
+        endpoint: 0.0.0.0:55679
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-query-config
+  namespace: mimir-tracing
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: query
+data:
+  jaeger-query.yaml: |
+    # Jaeger Query Configuration
+    
+    # Storage configuration
+    storage:
+      type: elasticsearch
+      elasticsearch:
+        server-urls: https://elasticsearch.mimir-logging:9200
+        username: elastic
+        password: ${ES_PASSWORD}
+        tls:
+          enabled: true
+          skip-host-verify: true
+        index-prefix: jaeger-span
+        max-span-age: 720h  # 30 days
+        num-shards: 3
+        num-replicas: 1
+        bulk:
+          size: 5000000  # 5MB
+          workers: 3
+          flush-interval: 200ms
+        timeout: 10s
+        version: 7
+    
+    # Query configuration
+    query:
+      static-files: /go/jaeger-ui/
+      ui-config: /etc/jaeger/ui-config.json
+      base-path: /
+      max-clock-skew-adjustment: 0s
+      
+      # CORS configuration
+      cors:
+        allowed-origins: ["*"]
+        allowed-methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        allowed-headers: ["*"]
+      
+      # Query limits
+      query-timeout: 30s
+      max-traces: 1500
+      
+      # Metrics backend for service dependencies
+      metrics-backend: prometheus
+      metrics-query-service: http://prometheus.mimir-monitoring:9090
+    
+    # Log configuration
+    log-level: info
+    
+    # Admin server
+    admin:
+      http:
+        host-port: 0.0.0.0:16687
+  
+  ui-config.json: |
+    {
+      "monitor": {
+        "menuEnabled": true
+      },
+      "dependencies": {
+        "menuEnabled": true,
+        "dagMaxNumServices": 200
+      },
+      "archiveEnabled": true,
+      "tracking": {
+        "gaID": null,
+        "trackErrors": false
+      },
+      "search": {
+        "maxLookback": {
+          "label": "2 Days",
+          "value": "2d"
+        },
+        "maxTraces": 1500
+      },
+      "scripts": [],
+      "linkPatterns": [
+        {
+          "type": "logs",
+          "key": "requestId",
+          "url": "https://kibana.example.com/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:now-1h,to:now))&_a=(columns:!(_source),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,index:'mimir-*',key:request_id,negate:!f,params:(query:'#{requestId}'),type:phrase),query:(match:(request_id:(query:'#{requestId}',type:phrase))))),index:'mimir-*',interval:auto,query:(language:kuery,query:''),sort:!())",
+          "text": "View Logs"
+        },
+        {
+          "type": "metrics",
+          "key": "serviceName",
+          "url": "https://grafana.example.com/d/mimir-overview/mimir-overview?var-service=#{serviceName}&from=now-1h&to=now",
+          "text": "View Metrics"
+        }
+      ]
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: elasticsearch-credentials
+  namespace: mimir-tracing
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: storage
+type: Opaque
+stringData:
+  username: elastic
+  password: CHANGE_THIS_STRONG_PASSWORD
+  # Base64 encoded "elastic:password"
+  auth_header: ZWxhc3RpYzpDSEFOR0VfVEhJU19TVFJPTkdfUEFTU1dPUkQ=
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-elasticsearch-template
+  namespace: mimir-tracing
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: storage
+data:
+  setup-jaeger-indices.sh: |
+    #!/bin/bash
+    set -e
+    
+    ELASTICSEARCH_URL="https://elasticsearch.mimir-logging:9200"
+    ELASTIC_PASSWORD="${ELASTIC_PASSWORD}"
+    
+    echo "Setting up Jaeger Elasticsearch indices..."
+    
+    # Create Jaeger span index template
+    curl -k -X PUT "${ELASTICSEARCH_URL}/_index_template/jaeger-span" \
+      -u "elastic:${ELASTIC_PASSWORD}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "index_patterns": ["jaeger-span-*"],
+        "template": {
+          "settings": {
+            "number_of_shards": 3,
+            "number_of_replicas": 1,
+            "index.mapping.ignore_malformed": false,
+            "index.mapping.coerce": false,
+            "index.refresh_interval": "5s",
+            "index.codec": "best_compression"
+          },
+          "mappings": {
+            "properties": {
+              "traceID": {
+                "type": "keyword",
+                "ignore_above": 256
+              },
+              "spanID": {
+                "type": "keyword",
+                "ignore_above": 256
+              },
+              "parentSpanID": {
+                "type": "keyword",
+                "ignore_above": 256
+              },
+              "operationName": {
+                "type": "keyword",
+                "ignore_above": 256
+              },
+              "startTime": {
+                "type": "long"
+              },
+              "duration": {
+                "type": "long"
+              },
+              "tags": {
+                "type": "nested",
+                "dynamic": false,
+                "properties": {
+                  "key": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  },
+                  "value": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  },
+                  "tagType": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  }
+                }
+              },
+              "logs": {
+                "type": "nested",
+                "dynamic": false,
+                "properties": {
+                  "timestamp": {
+                    "type": "long"
+                  },
+                  "fields": {
+                    "type": "nested",
+                    "dynamic": false,
+                    "properties": {
+                      "key": {
+                        "type": "keyword",
+                        "ignore_above": 256
+                      },
+                      "value": {
+                        "type": "keyword",
+                        "ignore_above": 256
+                      },
+                      "tagType": {
+                        "type": "keyword",
+                        "ignore_above": 256
+                      }
+                    }
+                  }
+                }
+              },
+              "process": {
+                "properties": {
+                  "serviceName": {
+                    "type": "keyword",
+                    "ignore_above": 256
+                  },
+                  "tags": {
+                    "type": "nested",
+                    "dynamic": false,
+                    "properties": {
+                      "key": {
+                        "type": "keyword",
+                        "ignore_above": 256
+                      },
+                      "value": {
+                        "type": "keyword",
+                        "ignore_above": 256
+                      },
+                      "tagType": {
+                        "type": "keyword",
+                        "ignore_above": 256
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }'
+    
+    # Create service index template
+    curl -k -X PUT "${ELASTICSEARCH_URL}/_index_template/jaeger-service" \
+      -u "elastic:${ELASTIC_PASSWORD}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "index_patterns": ["jaeger-service-*"],
+        "template": {
+          "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 1,
+            "index.refresh_interval": "30s"
+          },
+          "mappings": {
+            "properties": {
+              "serviceName": {
+                "type": "keyword"
+              },
+              "operationName": {
+                "type": "keyword"
+              }
+            }
+          }
+        }
+      }'
+    
+    # Create dependencies index template
+    curl -k -X PUT "${ELASTICSEARCH_URL}/_index_template/jaeger-dependencies" \
+      -u "elastic:${ELASTIC_PASSWORD}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "index_patterns": ["jaeger-dependencies-*"],
+        "template": {
+          "settings": {
+            "number_of_shards": 1,
+            "number_of_replicas": 1,
+            "index.refresh_interval": "30s"
+          },
+          "mappings": {
+            "properties": {
+              "timestamp": {
+                "type": "date"
+              },
+              "parent": {
+                "type": "keyword"
+              },
+              "child": {
+                "type": "keyword"
+              },
+              "callCount": {
+                "type": "long"
+              }
+            }
+          }
+        }
+      }'
+    
+    echo "Jaeger Elasticsearch templates created successfully!"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jaeger-elasticsearch-setup
+  namespace: mimir-tracing
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: setup
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jaeger
+        app.kubernetes.io/component: setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: setup
+        image: curlimages/curl:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: password
+        command:
+        - /bin/sh
+        - /scripts/setup-jaeger-indices.sh
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: jaeger-elasticsearch-template
+          defaultMode: 0755

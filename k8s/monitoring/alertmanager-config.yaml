@@ -1,0 +1,346 @@
+# Alertmanager Configuration for Mimir
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: mimir-monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      # ResolveTimeout is the time after which an alert is declared resolved
+      # if it has not been updated.
+      resolve_timeout: 5m
+      
+      # Slack configuration
+      slack_api_url: 'YOUR_SLACK_WEBHOOK_URL'
+      
+      # SMTP configuration for email alerts
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'alerts@example.com'
+      smtp_auth_username: 'alerts@example.com'
+      smtp_auth_password: 'YOUR_SMTP_PASSWORD'
+      smtp_require_tls: true
+    
+    # Templates for alert formatting
+    templates:
+      - '/etc/alertmanager/templates/*.tmpl'
+    
+    # The root route on which each incoming alert enters.
+    route:
+      # Group alerts by these labels
+      group_by: ['alertname', 'cluster', 'service', 'severity']
+      
+      # Wait before sending a notification for a group
+      group_wait: 10s
+      
+      # Wait before sending a notification about new alerts in a group
+      group_interval: 10s
+      
+      # Wait before resending a notification
+      repeat_interval: 1h
+      
+      # Default receiver
+      receiver: 'default-receiver'
+      
+      # Child routes
+      routes:
+      # Critical alerts go to PagerDuty
+      - match:
+          severity: critical
+        receiver: pagerduty-critical
+        continue: true
+      
+      # Database alerts go to DBA team
+      - match:
+          component: database
+        receiver: dba-team
+        continue: true
+      
+      # Infrastructure alerts go to platform team
+      - match:
+          component: infrastructure
+        receiver: platform-team
+        continue: true
+      
+      # Application alerts go to backend team
+      - match_re:
+          component: (api|worker|analytics)
+        receiver: backend-team
+        continue: true
+      
+      # SLA violations go to management
+      - match:
+          sla: ".*"
+        receiver: management
+        continue: true
+    
+    # Inhibition rules to mute certain alerts
+    inhibit_rules:
+    # Inhibit warning alerts if critical alert is firing
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'instance']
+    
+    # Inhibit node alerts if node is down
+    - source_match:
+        alertname: 'KubernetesNodeDown'
+      target_match_re:
+        alertname: 'Node.*'
+      equal: ['instance']
+    
+    # Receivers configuration
+    receivers:
+    # Default receiver
+    - name: 'default-receiver'
+      slack_configs:
+      - channel: '#alerts'
+        title: 'Mimir Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}'
+        send_resolved: true
+    
+    # PagerDuty for critical alerts
+    - name: 'pagerduty-critical'
+      pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+        details:
+          firing: '{{ .Alerts.Firing | len }}'
+          resolved: '{{ .Alerts.Resolved | len }}'
+          labels: '{{ .CommonLabels }}'
+    
+    # DBA team
+    - name: 'dba-team'
+      email_configs:
+      - to: 'dba-team@example.com'
+        headers:
+          Subject: '[{{ .Status | toUpper }}] Database Alert: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>{{ .GroupLabels.alertname }}</h2>
+          <p><strong>Summary:</strong> {{ .CommonAnnotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .CommonAnnotations.description }}</p>
+          <h3>Alerts:</h3>
+          <ul>
+          {{ range .Alerts }}
+          <li>
+            <strong>{{ .Labels.instance }}</strong><br>
+            Status: {{ .Status }}<br>
+            {{ if .Annotations.runbook_url }}
+            <a href="{{ .Annotations.runbook_url }}">Runbook</a><br>
+            {{ end }}
+          </li>
+          {{ end }}
+          </ul>
+      slack_configs:
+      - channel: '#database-alerts'
+        username: 'alertmanager'
+        icon_emoji: ':database:'
+        title: 'Database Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.summary }}'
+        send_resolved: true
+    
+    # Platform team
+    - name: 'platform-team'
+      slack_configs:
+      - channel: '#platform-alerts'
+        username: 'alertmanager'
+        icon_emoji: ':kubernetes:'
+        title: 'Infrastructure Alert: {{ .GroupLabels.alertname }}'
+        text: |
+          *Summary:* {{ .CommonAnnotations.summary }}
+          *Severity:* {{ .CommonLabels.severity }}
+          *Instance:* {{ .CommonLabels.instance }}
+        send_resolved: true
+      webhook_configs:
+      - url: 'https://oncall.example.com/webhook/platform'
+        send_resolved: true
+    
+    # Backend team
+    - name: 'backend-team'
+      slack_configs:
+      - channel: '#backend-alerts'
+        username: 'alertmanager'
+        icon_emoji: ':gear:'
+        title: 'Application Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ .CommonAnnotations.summary }}'
+        actions:
+        - type: button
+          text: 'View Dashboard'
+          url: 'https://grafana.example.com/d/mimir-app'
+        - type: button
+          text: 'View Logs'
+          url: 'https://kibana.example.com/app/logs'
+        send_resolved: true
+    
+    # Management for SLA violations
+    - name: 'management'
+      email_configs:
+      - to: 'management@example.com,cto@example.com'
+        headers:
+          Subject: '[URGENT] SLA Violation: {{ .GroupLabels.alertname }}'
+          Priority: 'urgent'
+        html: |
+          <h1 style="color: red;">SLA Violation Alert</h1>
+          <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+          <p><strong>Summary:</strong> {{ .CommonAnnotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .CommonAnnotations.description }}</p>
+          <p><strong>Time:</strong> {{ .Alerts.Firing | len }} alerts firing since {{ .StartsAt }}</p>
+      slack_configs:
+      - channel: '#sla-violations'
+        username: 'sla-bot'
+        icon_emoji: ':rotating_light:'
+        color: 'danger'
+        title: 'SLA VIOLATION'
+        text: '{{ .CommonAnnotations.summary }}'
+        send_resolved: true
+  
+  templates.tmpl: |
+    {{ define "slack.default.title" }}
+    [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.alertname }}
+    {{ end }}
+    
+    {{ define "slack.default.text" }}
+    {{ range .Alerts }}
+    *Alert:* {{ .Annotations.summary }}{{ if .Labels.severity }} - `{{ .Labels.severity }}`{{ end }}
+    *Description:* {{ .Annotations.description }}
+    *Labels:*
+      {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+      {{ end }}
+    {{ end }}
+    {{ end }}
+    
+    {{ define "email.default.subject" }}
+    [{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} ({{ .Alerts.Firing | len }} firing, {{ .Alerts.Resolved | len }} resolved)
+    {{ end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: mimir-monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+      app.kubernetes.io/component: monitoring
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alertmanager
+        app.kubernetes.io/component: monitoring
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9093"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        imagePullPolicy: IfNotPresent
+        args:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+          - '--storage.path=/alertmanager'
+          - '--cluster.advertise-address=$(POD_IP):9094'
+          - '--web.external-url=https://alertmanager.example.com'
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        ports:
+        - containerPort: 9093
+          name: web
+          protocol: TCP
+        - containerPort: 9094
+          name: cluster
+          protocol: TCP
+        resources:
+          requests:
+            memory: "200Mi"
+            cpu: "100m"
+          limits:
+            memory: "500Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: web
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: web
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+        - name: templates
+          mountPath: /etc/alertmanager/templates
+        - name: storage
+          mountPath: /alertmanager
+      - name: config-reloader
+        image: jimmidyson/configmap-reload:v0.8.0
+        imagePullPolicy: IfNotPresent
+        args:
+          - --volume-dir=/etc/alertmanager
+          - --webhook-url=http://localhost:9093/-/reload
+        resources:
+          requests:
+            memory: "10Mi"
+            cpu: "10m"
+          limits:
+            memory: "50Mi"
+            cpu: "50m"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/alertmanager
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: alertmanager-config
+          items:
+          - key: alertmanager.yml
+            path: alertmanager.yml
+      - name: templates
+        configMap:
+          name: alertmanager-config
+          items:
+          - key: templates.tmpl
+            path: default.tmpl
+      - name: storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: mimir-monitoring
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9093
+    targetPort: web
+    protocol: TCP
+    name: web
+  selector:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: monitoring

@@ -1,0 +1,547 @@
+# Trace Analysis Tools and Automated Monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trace-analysis-tools
+  namespace: mimir-tracing
+  labels:
+    app.kubernetes.io/name: jaeger
+    app.kubernetes.io/component: analysis
+data:
+  trace-analyzer.py: |
+    """
+    Automated trace analysis and anomaly detection
+    """
+    import requests
+    import json
+    import statistics
+    from datetime import datetime, timedelta
+    from typing import List, Dict, Any, Optional
+    import logging
+    from dataclasses import dataclass
+    
+    logger = logging.getLogger(__name__)
+    
+    @dataclass
+    class TraceMetrics:
+        """Metrics extracted from a trace"""
+        trace_id: str
+        service_name: str
+        operation_name: str
+        duration_ms: float
+        span_count: int
+        error_count: int
+        has_errors: bool
+        start_time: datetime
+        root_service: str
+    
+    @dataclass
+    class PerformanceAnomaly:
+        """Performance anomaly detection result"""
+        trace_id: str
+        service_name: str
+        operation_name: str
+        anomaly_type: str
+        severity: str
+        description: str
+        actual_value: float
+        expected_range: tuple
+        timestamp: datetime
+    
+    class TraceAnalyzer:
+        """Analyzes traces for performance issues and anomalies"""
+        
+        def __init__(self, jaeger_query_url: str):
+            self.jaeger_url = jaeger_query_url.rstrip('/')
+            self.baseline_metrics = {}
+            
+        def get_traces(self, service: str, operation: str = None, 
+                      lookback_hours: int = 1, limit: int = 100) -> List[Dict]:
+            """Fetch traces from Jaeger"""
+            
+            params = {
+                'service': service,
+                'lookback': f'{lookback_hours}h',
+                'limit': limit
+            }
+            
+            if operation:
+                params['operation'] = operation
+            
+            try:
+                response = requests.get(
+                    f'{self.jaeger_url}/api/traces',
+                    params=params,
+                    timeout=30
+                )
+                response.raise_for_status()
+                return response.json().get('data', [])
+                
+            except requests.RequestException as e:
+                logger.error(f"Failed to fetch traces: {e}")
+                return []
+        
+        def extract_metrics(self, trace: Dict) -> TraceMetrics:
+            """Extract metrics from a single trace"""
+            
+            spans = trace.get('spans', [])
+            if not spans:
+                return None
+            
+            # Find root span
+            root_span = None
+            for span in spans:
+                if not span.get('references'):
+                    root_span = span
+                    break
+            
+            if not root_span:
+                root_span = spans[0]
+            
+            # Calculate metrics
+            trace_id = trace.get('traceID', '')
+            duration_ms = root_span.get('duration', 0) / 1000  # Convert to ms
+            span_count = len(spans)
+            error_count = sum(1 for span in spans if self._span_has_error(span))
+            has_errors = error_count > 0
+            
+            start_time = datetime.fromtimestamp(
+                root_span.get('startTime', 0) / 1000000  # Convert from microseconds
+            )
+            
+            service_name = root_span.get('process', {}).get('serviceName', 'unknown')
+            operation_name = root_span.get('operationName', 'unknown')
+            
+            return TraceMetrics(
+                trace_id=trace_id,
+                service_name=service_name,
+                operation_name=operation_name,
+                duration_ms=duration_ms,
+                span_count=span_count,
+                error_count=error_count,
+                has_errors=has_errors,
+                start_time=start_time,
+                root_service=service_name
+            )
+        
+        def _span_has_error(self, span: Dict) -> bool:
+            """Check if span has error tags"""
+            tags = span.get('tags', [])
+            for tag in tags:
+                if tag.get('key') == 'error' and tag.get('value') is True:
+                    return True
+                if tag.get('key') == 'http.status_code':
+                    status_code = int(tag.get('value', 0))
+                    if status_code >= 400:
+                        return True
+            return False
+        
+        def analyze_performance(self, traces_metrics: List[TraceMetrics]) -> List[PerformanceAnomaly]:
+            """Analyze traces for performance anomalies"""
+            
+            anomalies = []
+            
+            # Group by service and operation
+            groups = {}
+            for metric in traces_metrics:
+                key = (metric.service_name, metric.operation_name)
+                if key not in groups:
+                    groups[key] = []
+                groups[key].append(metric)
+            
+            # Analyze each group
+            for (service, operation), group_metrics in groups.items():
+                if len(group_metrics) < 5:  # Need minimum samples
+                    continue
+                
+                durations = [m.duration_ms for m in group_metrics]
+                
+                # Calculate baseline statistics
+                mean_duration = statistics.mean(durations)
+                stdev_duration = statistics.stdev(durations) if len(durations) > 1 else 0
+                p95_duration = self._percentile(durations, 95)
+                p99_duration = self._percentile(durations, 99)
+                
+                # Store baseline for future comparisons
+                baseline_key = f"{service}:{operation}"
+                self.baseline_metrics[baseline_key] = {
+                    'mean': mean_duration,
+                    'stdev': stdev_duration,
+                    'p95': p95_duration,
+                    'p99': p99_duration
+                }
+                
+                # Detect anomalies
+                threshold_high = mean_duration + (3 * stdev_duration)
+                threshold_very_high = mean_duration + (5 * stdev_duration)
+                
+                for metric in group_metrics:
+                    # High latency detection
+                    if metric.duration_ms > threshold_very_high:
+                        anomalies.append(PerformanceAnomaly(
+                            trace_id=metric.trace_id,
+                            service_name=service,
+                            operation_name=operation,
+                            anomaly_type='extreme_latency',
+                            severity='critical',
+                            description=f'Latency {metric.duration_ms:.1f}ms is extremely high (5+ std dev)',
+                            actual_value=metric.duration_ms,
+                            expected_range=(0, threshold_high),
+                            timestamp=metric.start_time
+                        ))
+                    elif metric.duration_ms > threshold_high:
+                        anomalies.append(PerformanceAnomaly(
+                            trace_id=metric.trace_id,
+                            service_name=service,
+                            operation_name=operation,
+                            anomaly_type='high_latency',
+                            severity='warning',
+                            description=f'Latency {metric.duration_ms:.1f}ms is high (3+ std dev)',
+                            actual_value=metric.duration_ms,
+                            expected_range=(0, threshold_high),
+                            timestamp=metric.start_time
+                        ))
+                    
+                    # Error detection
+                    if metric.has_errors:
+                        severity = 'critical' if metric.error_count > 1 else 'warning'
+                        anomalies.append(PerformanceAnomaly(
+                            trace_id=metric.trace_id,
+                            service_name=service,
+                            operation_name=operation,
+                            anomaly_type='errors',
+                            severity=severity,
+                            description=f'Trace contains {metric.error_count} error(s)',
+                            actual_value=metric.error_count,
+                            expected_range=(0, 0),
+                            timestamp=metric.start_time
+                        ))
+                    
+                    # High span count (complexity)
+                    if metric.span_count > 50:
+                        anomalies.append(PerformanceAnomaly(
+                            trace_id=metric.trace_id,
+                            service_name=service,
+                            operation_name=operation,
+                            anomaly_type='high_complexity',
+                            severity='info',
+                            description=f'Trace has {metric.span_count} spans (high complexity)',
+                            actual_value=metric.span_count,
+                            expected_range=(0, 50),
+                            timestamp=metric.start_time
+                        ))
+            
+            return anomalies
+        
+        def _percentile(self, data: List[float], percentile: int) -> float:
+            """Calculate percentile"""
+            sorted_data = sorted(data)
+            index = (percentile / 100) * (len(sorted_data) - 1)
+            
+            if index.is_integer():
+                return sorted_data[int(index)]
+            else:
+                lower = sorted_data[int(index)]
+                upper = sorted_data[int(index) + 1]
+                return lower + (upper - lower) * (index - int(index))
+        
+        def generate_report(self, anomalies: List[PerformanceAnomaly]) -> Dict:
+            """Generate analysis report"""
+            
+            if not anomalies:
+                return {
+                    'status': 'healthy',
+                    'summary': 'No anomalies detected',
+                    'anomaly_count': 0,
+                    'timestamp': datetime.utcnow().isoformat()
+                }
+            
+            # Group by severity
+            by_severity = {}
+            for anomaly in anomalies:
+                if anomaly.severity not in by_severity:
+                    by_severity[anomaly.severity] = []
+                by_severity[anomaly.severity].append(anomaly)
+            
+            # Group by service
+            by_service = {}
+            for anomaly in anomalies:
+                if anomaly.service_name not in by_service:
+                    by_service[anomaly.service_name] = []
+                by_service[anomaly.service_name].append(anomaly)
+            
+            return {
+                'status': 'issues_detected' if anomalies else 'healthy',
+                'summary': f'Found {len(anomalies)} anomalies',
+                'anomaly_count': len(anomalies),
+                'by_severity': {
+                    severity: len(items) for severity, items in by_severity.items()
+                },
+                'by_service': {
+                    service: len(items) for service, items in by_service.items()
+                },
+                'top_issues': [
+                    {
+                        'trace_id': a.trace_id,
+                        'service': a.service_name,
+                        'operation': a.operation_name,
+                        'type': a.anomaly_type,
+                        'severity': a.severity,
+                        'description': a.description
+                    }
+                    for a in sorted(anomalies, key=lambda x: x.severity == 'critical', reverse=True)[:10]
+                ],
+                'timestamp': datetime.utcnow().isoformat()
+            }
+    
+    # Usage example
+    if __name__ == "__main__":
+        analyzer = TraceAnalyzer("http://jaeger-query.mimir-tracing:16686")
+        
+        # Analyze traces for all Mimir services
+        services = ['mimir-api', 'mimir-worker', 'mimir-analytics']
+        all_anomalies = []
+        
+        for service in services:
+            traces = analyzer.get_traces(service, lookback_hours=1, limit=100)
+            metrics = [analyzer.extract_metrics(trace) for trace in traces]
+            metrics = [m for m in metrics if m is not None]
+            
+            if metrics:
+                anomalies = analyzer.analyze_performance(metrics)
+                all_anomalies.extend(anomalies)
+        
+        # Generate report
+        report = analyzer.generate_report(all_anomalies)
+        print(json.dumps(report, indent=2))
+  
+  trace-dashboard-queries.json: |
+    {
+      "trace_analysis_queries": {
+        "high_latency_traces": {
+          "description": "Find traces with latency > 95th percentile",
+          "jaeger_query": "service=mimir-api AND duration>2s",
+          "prometheus_query": "histogram_quantile(0.95, sum(rate(jaeger_span_duration_seconds_bucket{service_name=\"mimir-api\"}[5m])) by (le))"
+        },
+        "error_traces": {
+          "description": "Find traces with errors",
+          "jaeger_query": "service=mimir-api AND tags.error=true",
+          "prometheus_query": "sum(rate(jaeger_spans_total{service_name=\"mimir-api\", span_kind=\"server\", status_code!=\"OK\"}[5m]))"
+        },
+        "database_slow_queries": {
+          "description": "Find slow database operations",
+          "jaeger_query": "operation=\"database.query\" AND duration>500ms",
+          "prometheus_query": "histogram_quantile(0.95, sum(rate(jaeger_span_duration_seconds_bucket{operation_name=~\".*database.*\"}[5m])) by (le))"
+        },
+        "external_api_failures": {
+          "description": "Find failed external API calls",
+          "jaeger_query": "operation=~\"external.*\" AND tags.http\\.status_code>=400",
+          "prometheus_query": "sum(rate(jaeger_spans_total{operation_name=~\"external.*\", status_code!=\"OK\"}[5m]))"
+        },
+        "complex_traces": {
+          "description": "Find traces with high span count",
+          "jaeger_query": "service=mimir-api",
+          "filter": "span_count > 50"
+        }
+      },
+      "performance_kpis": {
+        "service_latency_p95": "histogram_quantile(0.95, sum(rate(jaeger_span_duration_seconds_bucket{span_kind=\"server\"}[5m])) by (service_name, le))",
+        "service_latency_p99": "histogram_quantile(0.99, sum(rate(jaeger_span_duration_seconds_bucket{span_kind=\"server\"}[5m])) by (service_name, le))",
+        "error_rate": "sum(rate(jaeger_spans_total{span_kind=\"server\", status_code!=\"OK\"}[5m])) by (service_name) / sum(rate(jaeger_spans_total{span_kind=\"server\"}[5m])) by (service_name)",
+        "throughput": "sum(rate(jaeger_spans_total{span_kind=\"server\"}[5m])) by (service_name)",
+        "dependency_latency": "histogram_quantile(0.95, sum(rate(jaeger_span_duration_seconds_bucket{span_kind=\"client\"}[5m])) by (service_name, operation_name, le))"
+      }
+    }
+  
+  performance-alerts.py: |
+    """
+    Performance alerting based on trace analysis
+    """
+    import requests
+    import json
+    import time
+    from datetime import datetime, timedelta
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    class PerformanceAlerter:
+        """Sends alerts based on trace analysis"""
+        
+        def __init__(self, webhook_url: str, analyzer: 'TraceAnalyzer'):
+            self.webhook_url = webhook_url
+            self.analyzer = analyzer
+            self.alert_history = {}
+            
+        def check_and_alert(self, services: list, lookback_hours: int = 1):
+            """Check traces and send alerts if needed"""
+            
+            all_anomalies = []
+            
+            # Analyze traces for each service
+            for service in services:
+                traces = self.analyzer.get_traces(
+                    service, 
+                    lookback_hours=lookback_hours,
+                    limit=200
+                )
+                
+                metrics = [
+                    self.analyzer.extract_metrics(trace) 
+                    for trace in traces
+                ]
+                metrics = [m for m in metrics if m is not None]
+                
+                if metrics:
+                    anomalies = self.analyzer.analyze_performance(metrics)
+                    all_anomalies.extend(anomalies)
+            
+            if not all_anomalies:
+                return
+            
+            # Group critical anomalies
+            critical_anomalies = [
+                a for a in all_anomalies 
+                if a.severity == 'critical'
+            ]
+            
+            if critical_anomalies:
+                self._send_critical_alert(critical_anomalies)
+            
+            # Check for trending issues
+            trending_issues = self._detect_trending_issues(all_anomalies)
+            if trending_issues:
+                self._send_trending_alert(trending_issues)
+        
+        def _send_critical_alert(self, anomalies: list):
+            """Send critical performance alert"""
+            
+            services_affected = set(a.service_name for a in anomalies)
+            
+            alert = {
+                'alert_type': 'critical_performance',
+                'severity': 'critical',
+                'summary': f'Critical performance issues detected in {len(services_affected)} services',
+                'details': {
+                    'anomaly_count': len(anomalies),
+                    'services_affected': list(services_affected),
+                    'issues': [
+                        {
+                            'service': a.service_name,
+                            'operation': a.operation_name,
+                            'type': a.anomaly_type,
+                            'description': a.description,
+                            'trace_id': a.trace_id,
+                            'jaeger_url': f'http://jaeger.example.com/trace/{a.trace_id}'
+                        }
+                        for a in anomalies[:5]  # Top 5 issues
+                    ]
+                },
+                'timestamp': datetime.utcnow().isoformat(),
+                'runbook_url': 'https://wiki.example.com/runbooks/performance-issues'
+            }
+            
+            self._send_webhook(alert)
+        
+        def _detect_trending_issues(self, anomalies: list) -> list:
+            """Detect trending performance issues"""
+            
+            # Simple trending detection based on recent history
+            current_time = datetime.utcnow()
+            recent_anomalies = [
+                a for a in anomalies
+                if (current_time - a.timestamp).total_seconds() < 300  # Last 5 minutes
+            ]
+            
+            # Group by service and operation
+            issue_counts = {}
+            for anomaly in recent_anomalies:
+                key = (anomaly.service_name, anomaly.operation_name, anomaly.anomaly_type)
+                issue_counts[key] = issue_counts.get(key, 0) + 1
+            
+            # Find trending issues (> 3 occurrences in 5 minutes)
+            trending = [
+                {'service': service, 'operation': operation, 'type': issue_type, 'count': count}
+                for (service, operation, issue_type), count in issue_counts.items()
+                if count > 3
+            ]
+            
+            return trending
+        
+        def _send_trending_alert(self, trending_issues: list):
+            """Send trending issues alert"""
+            
+            alert = {
+                'alert_type': 'trending_performance',
+                'severity': 'warning',
+                'summary': f'Trending performance issues detected',
+                'details': {
+                    'trending_issues': trending_issues
+                },
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            
+            self._send_webhook(alert)
+        
+        def _send_webhook(self, alert: dict):
+            """Send alert via webhook"""
+            
+            try:
+                response = requests.post(
+                    self.webhook_url,
+                    json=alert,
+                    timeout=10
+                )
+                response.raise_for_status()
+                logger.info(f"Alert sent successfully: {alert['alert_type']}")
+                
+            except requests.RequestException as e:
+                logger.error(f"Failed to send alert: {e}")
+  
+  automated-monitoring.sh: |
+    #!/bin/bash
+    # Automated trace monitoring script
+    
+    set -euo pipefail
+    
+    # Configuration
+    JAEGER_URL="${JAEGER_URL:-http://jaeger-query.mimir-tracing:16686}"
+    WEBHOOK_URL="${WEBHOOK_URL:-https://alerts.example.com/webhook}"
+    CHECK_INTERVAL="${CHECK_INTERVAL:-300}"  # 5 minutes
+    SERVICES="${SERVICES:-mimir-api,mimir-worker,mimir-analytics}"
+    
+    echo "Starting automated trace monitoring..."
+    echo "Jaeger URL: $JAEGER_URL"
+    echo "Check interval: ${CHECK_INTERVAL}s"
+    echo "Services: $SERVICES"
+    
+    while true; do
+        echo "$(date): Running trace analysis..."
+        
+        # Run trace analysis
+        python3 /scripts/trace-analyzer.py \
+            --jaeger-url "$JAEGER_URL" \
+            --webhook-url "$WEBHOOK_URL" \
+            --services "$SERVICES" \
+            --lookback-hours 1 \
+            --output-format json \
+            > /tmp/trace-analysis.json
+        
+        # Check if any critical issues were found
+        CRITICAL_COUNT=$(cat /tmp/trace-analysis.json | jq '.by_severity.critical // 0')
+        
+        if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "Found $CRITICAL_COUNT critical performance issues!"
+            
+            # Send summary to monitoring
+            curl -X POST "$WEBHOOK_URL/trace-analysis" \
+                -H "Content-Type: application/json" \
+                -d @/tmp/trace-analysis.json || true
+        else
+            echo "No critical issues found"
+        fi
+        
+        echo "Next check in ${CHECK_INTERVAL}s..."
+        sleep "$CHECK_INTERVAL"
+    done

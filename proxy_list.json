@@ -1,0 +1,41 @@
+{
+  "description": "Proxy list configuration for Mimir News Scraper",
+  "version": "1.0",
+  "last_updated": "2024-01-01T00:00:00Z",
+  "proxies": [
+    {
+      "url": "http://proxy1.example.com:8080",
+      "location": "US-East",
+      "provider": "example_provider",
+      "tags": ["reliable", "fast"],
+      "authentication": {
+        "type": "basic",
+        "username_env": "PROXY1_USERNAME",
+        "password_env": "PROXY1_PASSWORD"
+      },
+      "max_concurrent": 10,
+      "rate_limit_per_minute": 60,
+      "notes": "Replace with actual proxy URL and credentials"
+    },
+    {
+      "url": "http://proxy2.example.com:8080",
+      "location": "EU-West",
+      "provider": "example_provider",
+      "tags": ["secure", "stable"],
+      "authentication": {
+        "type": "basic",
+        "username_env": "PROXY2_USERNAME", 
+        "password_env": "PROXY2_PASSWORD"
+      },
+      "max_concurrent": 5,
+      "rate_limit_per_minute": 30,
+      "notes": "Replace with actual proxy URL and credentials"
+    }
+  ],
+  "usage_notes": [
+    "Replace example URLs with actual proxy endpoints",
+    "Set environment variables for authentication",
+    "Adjust rate limits based on your proxy service plan",
+    "Use 'tags' to categorize proxies for specific use cases"
+  ]
+}

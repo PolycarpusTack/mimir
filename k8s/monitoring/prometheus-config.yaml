@@ -1,0 +1,301 @@
+# Prometheus Configuration for Mimir
+# Includes scrape configs, recording rules, and service discovery
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: mimir-monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: mimir
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'mimir-prod'
+        region: 'us-east-1'
+    
+    # Alertmanager configuration
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - alertmanager:9093
+    
+    # Rule files
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+    
+    # Scrape configurations
+    scrape_configs:
+    # Prometheus self-monitoring
+    - job_name: 'prometheus'
+      static_configs:
+      - targets: ['localhost:9090']
+    
+    # Kubernetes API server
+    - job_name: 'kubernetes-apiservers'
+      kubernetes_sd_configs:
+      - role: endpoints
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        action: keep
+        regex: default;kubernetes;https
+    
+    # Kubernetes nodes
+    - job_name: 'kubernetes-nodes'
+      kubernetes_sd_configs:
+      - role: node
+      scheme: https
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+    
+    # Kubernetes pods
+    - job_name: 'kubernetes-pods'
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      # Only scrape pods with prometheus.io/scrape annotation
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+    
+    # Mimir application metrics
+    - job_name: 'mimir-application'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['mimir']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_part_of]
+        action: keep
+        regex: mimir
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+        replacement: $1
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: replace
+        target_label: app
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+        action: replace
+        target_label: component
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: pod
+    
+    # PostgreSQL exporter
+    - job_name: 'postgres-exporter'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['mimir']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: postgres-exporter
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:9187
+        target_label: __address__
+    
+    # Redis exporter
+    - job_name: 'redis-exporter'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['mimir']
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        action: keep
+        regex: redis-exporter
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:9121
+        target_label: __address__
+    
+    # Node exporter
+    - job_name: 'node-exporter'
+      kubernetes_sd_configs:
+      - role: node
+      relabel_configs:
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: $1:9100
+        target_label: __address__
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+    
+    # kube-state-metrics
+    - job_name: 'kube-state-metrics'
+      static_configs:
+      - targets: ['kube-state-metrics:8080']
+  
+  recording_rules.yml: |
+    groups:
+    - name: mimir_application_rules
+      interval: 30s
+      rules:
+      # API request rate
+      - record: mimir:api_request_rate
+        expr: |
+          sum by (app, method, endpoint) (
+            rate(http_requests_total{app="mimir-api"}[5m])
+          )
+      
+      # API error rate
+      - record: mimir:api_error_rate
+        expr: |
+          sum by (app, method, endpoint) (
+            rate(http_requests_total{app="mimir-api", status=~"5.."}[5m])
+          )
+      
+      # API success rate
+      - record: mimir:api_success_rate
+        expr: |
+          (1 - (
+            sum by (app) (rate(http_requests_total{app="mimir-api", status=~"5.."}[5m]))
+            /
+            sum by (app) (rate(http_requests_total{app="mimir-api"}[5m]))
+          )) * 100
+      
+      # Worker processing rate
+      - record: mimir:worker_tasks_processed_rate
+        expr: |
+          sum by (app, task_type) (
+            rate(celery_tasks_total{app="mimir-worker"}[5m])
+          )
+      
+      # Database connection pool utilization
+      - record: mimir:db_pool_utilization
+        expr: |
+          (sum by (app) (pg_pool_connections_active) / sum by (app) (pg_pool_connections_total)) * 100
+      
+      # Cache hit ratio
+      - record: mimir:cache_hit_ratio
+        expr: |
+          (
+            sum(rate(redis_keyspace_hits_total[5m]))
+            /
+            (sum(rate(redis_keyspace_hits_total[5m])) + sum(rate(redis_keyspace_misses_total[5m])))
+          ) * 100
+      
+      # Scraping success rate
+      - record: mimir:scraping_success_rate
+        expr: |
+          (
+            sum(rate(mimir_scraper_success_total[5m]))
+            /
+            sum(rate(mimir_scraper_attempts_total[5m]))
+          ) * 100
+      
+      # Article processing latency percentiles
+      - record: mimir:article_processing_latency_p50
+        expr: |
+          histogram_quantile(0.5,
+            sum by (le) (
+              rate(mimir_article_processing_duration_seconds_bucket[5m])
+            )
+          )
+      
+      - record: mimir:article_processing_latency_p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(mimir_article_processing_duration_seconds_bucket[5m])
+            )
+          )
+      
+      - record: mimir:article_processing_latency_p99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (
+              rate(mimir_article_processing_duration_seconds_bucket[5m])
+            )
+          )
+    
+    - name: infrastructure_rules
+      interval: 30s
+      rules:
+      # Cluster CPU utilization
+      - record: cluster:cpu_utilization
+        expr: |
+          (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))) * 100
+      
+      # Cluster memory utilization
+      - record: cluster:memory_utilization
+        expr: |
+          (1 - sum(node_memory_MemAvailable_bytes) / sum(node_memory_MemTotal_bytes)) * 100
+      
+      # Pod CPU utilization
+      - record: namespace:pod_cpu_utilization
+        expr: |
+          sum by (namespace, pod) (
+            rate(container_cpu_usage_seconds_total{container!=""}[5m])
+          ) * 100
+      
+      # Pod memory utilization
+      - record: namespace:pod_memory_utilization
+        expr: |
+          sum by (namespace, pod) (
+            container_memory_working_set_bytes{container!=""}
+          )
+      
+      # Persistent volume usage
+      - record: namespace:pv_usage_percentage
+        expr: |
+          (
+            kubelet_volume_stats_used_bytes
+            /
+            kubelet_volume_stats_capacity_bytes
+          ) * 100

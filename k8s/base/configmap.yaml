@@ -1,0 +1,306 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-config
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: configuration
+data:
+  # Application Configuration
+  ENVIRONMENT: "production"
+  LOG_LEVEL: "INFO"
+  TZ: "UTC"
+  
+  # Database Configuration
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "mimir_news"
+  DATABASE_POOL_SIZE: "50"
+  DATABASE_MAX_OVERFLOW: "100"
+  DATABASE_POOL_TIMEOUT: "60"
+  DATABASE_POOL_RECYCLE: "3600"
+  
+  # Redis Configuration
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_MAX_CONNECTIONS: "200"
+  REDIS_SOCKET_TIMEOUT: "30"
+  
+  # API Configuration
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  API_WORKERS: "4"
+  API_TIMEOUT: "300"
+  API_MAX_REQUESTS: "1000"
+  API_MAX_REQUESTS_JITTER: "100"
+  
+  # Web Configuration
+  WEB_HOST: "0.0.0.0"
+  WEB_PORT: "5000"
+  
+  # Analytics Configuration
+  ANALYTICS_HOST: "0.0.0.0"
+  ANALYTICS_PORT: "5001"
+  
+  # Worker Configuration
+  WORKER_CONCURRENCY: "4"
+  WORKER_MAX_TASKS_PER_CHILD: "1000"
+  WORKER_PREFETCH_MULTIPLIER: "1"
+  
+  # Feature Flags
+  ENABLE_API_DOCS: "false"
+  ENABLE_DEBUG_TOOLBAR: "false"
+  ENABLE_PROFILER: "false"
+  ENABLE_RATE_LIMITING: "true"
+  
+  # Health Check Configuration
+  HEALTH_CHECK_INTERVAL: "30"
+  HEALTH_CHECK_DATABASE: "true"
+  HEALTH_CHECK_REDIS: "true"
+  HEALTH_CHECK_EXTERNAL_SERVICES: "true"
+  
+  # Cache Configuration
+  CACHE_TYPE: "redis"
+  CACHE_DEFAULT_TIMEOUT: "1800"
+  CACHE_KEY_PREFIX: "mimir_prod"
+  
+  # Session Configuration
+  SESSION_TYPE: "redis"
+  SESSION_PERMANENT: "false"
+  SESSION_USE_SIGNER: "true"
+  SESSION_KEY_PREFIX: "session:"
+  SESSION_COOKIE_NAME: "mimir_session"
+  SESSION_COOKIE_SECURE: "true"
+  SESSION_COOKIE_HTTPONLY: "true"
+  SESSION_COOKIE_SAMESITE: "Strict"
+  
+  # Security Configuration
+  JWT_ACCESS_TOKEN_EXPIRES: "900"
+  JWT_REFRESH_TOKEN_EXPIRES: "86400"
+  PASSWORD_MIN_LENGTH: "16"
+  BCRYPT_LOG_ROUNDS: "15"
+  WTF_CSRF_ENABLED: "true"
+  
+  # Rate Limiting
+  RATE_LIMIT_DEFAULT: "50 per hour"
+  RATE_LIMIT_LOGIN: "5 per minute"
+  RATE_LIMIT_API: "500 per hour"
+  
+  # File Upload
+  MAX_CONTENT_LENGTH: "67108864"
+  UPLOAD_FOLDER: "/var/uploads"
+  ALLOWED_EXTENSIONS: "txt,pdf,png,jpg,jpeg,gif,csv,json"
+  
+  # Monitoring
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+  PROMETHEUS_PORT: "9090"
+  
+  # Backup Configuration
+  BACKUP_ENABLED: "true"
+  BACKUP_SCHEDULE: "0 2 * * *"
+  BACKUP_RETENTION_DAYS: "30"
+  BACKUP_ENCRYPTION_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-nginx-config
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: nginx
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+
+    events {
+        worker_connections 2048;
+        use epoll;
+        multi_accept on;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for" '
+                        'rt=$request_time uct="$upstream_connect_time" '
+                        'uht="$upstream_header_time" urt="$upstream_response_time"';
+        
+        access_log /var/log/nginx/access.log main;
+        
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        keepalive_requests 1000;
+        types_hash_max_size 2048;
+        server_tokens off;
+        
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_types text/plain text/css text/xml text/javascript application/json application/javascript application/xml+rss application/atom+xml image/svg+xml;
+        
+        # Security headers
+        add_header X-Frame-Options DENY always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        
+        # Upstream definitions
+        upstream mimir_api {
+            least_conn;
+            server mimir-api-service:8000 max_fails=3 fail_timeout=30s;
+            keepalive 32;
+        }
+        
+        upstream mimir_web {
+            least_conn;
+            server mimir-web-service:5000 max_fails=3 fail_timeout=30s;
+            keepalive 32;
+        }
+        
+        upstream mimir_analytics {
+            least_conn;
+            server mimir-analytics-service:5001 max_fails=3 fail_timeout=30s;
+            keepalive 32;
+        }
+        
+        server {
+            listen 80;
+            server_name _;
+            
+            # Health check endpoint
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+            
+            # API routes
+            location /api/ {
+                proxy_pass http://mimir_api;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection 'upgrade';
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                proxy_connect_timeout 60s;
+                proxy_send_timeout 60s;
+                proxy_read_timeout 60s;
+                
+                proxy_buffering on;
+                proxy_buffer_size 8k;
+                proxy_buffers 16 8k;
+                proxy_busy_buffers_size 16k;
+            }
+            
+            # Analytics dashboard
+            location /analytics/ {
+                proxy_pass http://mimir_analytics/;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                
+                proxy_read_timeout 300s;
+                proxy_send_timeout 300s;
+            }
+            
+            # WebSocket endpoint
+            location /ws/ {
+                proxy_pass http://mimir_web;
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                
+                proxy_read_timeout 86400s;
+                proxy_send_timeout 86400s;
+            }
+            
+            # Main web application
+            location / {
+                proxy_pass http://mimir_web;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                proxy_connect_timeout 60s;
+                proxy_send_timeout 60s;
+                proxy_read_timeout 60s;
+            }
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-scripts
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: scripts
+data:
+  init-db.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "Initializing database..."
+    
+    # Wait for database to be ready
+    until PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -U $POSTGRES_USER -d postgres -c '\q'; do
+      echo "Waiting for PostgreSQL to be ready..."
+      sleep 2
+    done
+    
+    # Create database if it doesn't exist
+    PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -U $POSTGRES_USER -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = '$POSTGRES_DB'" | grep -q 1 || \
+      PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -U $POSTGRES_USER -d postgres -c "CREATE DATABASE $POSTGRES_DB"
+    
+    # Run migrations
+    echo "Running database migrations..."
+    alembic upgrade head
+    
+    echo "Database initialization complete"
+  
+  wait-for-dependencies.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "Waiting for dependencies..."
+    
+    # Wait for PostgreSQL
+    until pg_isready -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER; do
+      echo "Waiting for PostgreSQL..."
+      sleep 2
+    done
+    
+    # Wait for Redis
+    until redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASSWORD ping; do
+      echo "Waiting for Redis..."
+      sleep 2
+    done
+    
+    echo "All dependencies are ready"

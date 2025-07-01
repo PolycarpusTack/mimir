@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mimir Analytics Dashboard</title>
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    
+    <!-- Bootstrap for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .dashboard-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem 0;
+            margin-bottom: 2rem;
+        }
+        
+        .metric-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: transform 0.2s;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            height: 400px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-healthy { background-color: #28a745; }
+        .status-warning { background-color: #ffc107; }
+        .status-error { background-color: #dc3545; }
+        
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            border: none;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            font-size: 1.5rem;
+            transition: all 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #5a6fd8;
+            transform: scale(1.1);
+        }
+        
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        .keyword-tag {
+            display: inline-block;
+            background: #e9ecef;
+            color: #495057;
+            padding: 0.25rem 0.5rem;
+            margin: 0.25rem;
+            border-radius: 15px;
+            font-size: 0.85rem;
+        }
+        
+        .trend-up { color: #28a745; }
+        .trend-down { color: #dc3545; }
+        .trend-stable { color: #6c757d; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h1 class="mb-0">
+                        <i class="fas fa-chart-line me-3"></i>
+                        Mimir Analytics Dashboard
+                    </h1>
+                    <p class="mb-0 opacity-75">Business Intelligence & News Analytics</p>
+                </div>
+                <div class="col-auto">
+                    <div class="d-flex align-items-center">
+                        <span class="status-indicator status-healthy" id="systemStatus"></span>
+                        <span id="systemStatusText">System Status</span>
+                        <div class="ms-3">
+                            <small id="lastUpdated">Last updated: --</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- Overview Metrics -->
+        <div class="row" id="overviewMetrics">
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+                <div class="metric-card text-center">
+                    <div class="metric-value" id="articles24h">--</div>
+                    <div class="metric-label">Articles (24h)</div>
+                </div>
+            </div>
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+                <div class="metric-card text-center">
+                    <div class="metric-value" id="avgHourlyVolume">--</div>
+                    <div class="metric-label">Avg Hourly Volume</div>
+                </div>
+            </div>
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+                <div class="metric-card text-center">
+                    <div class="metric-value" id="activeSources">--</div>
+                    <div class="metric-label">Active Sources</div>
+                </div>
+            </div>
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+                <div class="metric-card text-center">
+                    <div class="metric-value" id="overallSentiment">--</div>
+                    <div class="metric-label">Overall Sentiment</div>
+                </div>
+            </div>
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+                <div class="metric-card text-center">
+                    <div class="metric-value" id="cpuUsage">--%</div>
+                    <div class="metric-label">CPU Usage</div>
+                </div>
+            </div>
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+                <div class="metric-card text-center">
+                    <div class="metric-value" id="memoryUsage">--MB</div>
+                    <div class="metric-label">Memory Usage</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="chart-container">
+                    <h5 class="mb-3">
+                        <i class="fas fa-chart-area me-2"></i>
+                        Article Volume Trend
+                        <div class="btn-group btn-group-sm float-end" role="group">
+                            <button type="button" class="btn btn-outline-primary active" onclick="updateVolumeTrend(24)">24h</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="updateVolumeTrend(168)">7d</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="updateVolumeTrend(720)">30d</button>
+                        </div>
+                    </h5>
+                    <canvas id="volumeTrendChart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="chart-container">
+                    <h5 class="mb-3">
+                        <i class="fas fa-tags me-2"></i>
+                        Trending Keywords
+                    </h5>
+                    <div id="trendingKeywords">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5 class="mb-3">
+                        <i class="fas fa-newspaper me-2"></i>
+                        Source Performance
+                    </h5>
+                    <canvas id="sourcePerformanceChart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h5 class="mb-3">
+                        <i class="fas fa-hashtag me-2"></i>
+                        Keyword Mentions
+                    </h5>
+                    <canvas id="keywordChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Forecast Section -->
+        <div class="row">
+            <div class="col-12">
+                <div class="chart-container">
+                    <h5 class="mb-3">
+                        <i class="fas fa-crystal-ball me-2"></i>
+                        Predictive Forecasts
+                        <div class="btn-group btn-group-sm float-end" role="group">
+                            <button type="button" class="btn btn-outline-success active" onclick="updateForecast('volume')">Volume</button>
+                            <button type="button" class="btn btn-outline-success" onclick="updateForecast('sentiment')">Sentiment</button>
+                            <button type="button" class="btn btn-outline-success" onclick="updateForecast('topics')">Topics</button>
+                        </div>
+                    </h5>
+                    <div id="forecastContent">
+                        <div class="text-center">
+                            <div class="spinner-border text-success" role="status">
+                                <span class="visually-hidden">Loading forecast...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <button class="refresh-btn" onclick="refreshDashboard()" id="refreshBtn">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <script>
+        // Global variables
+        let charts = {};
+        let refreshInterval;
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            loadDashboardData();
+            
+            // Auto refresh every 5 minutes
+            refreshInterval = setInterval(refreshDashboard, 5 * 60 * 1000);
+        });
+        
+        function initializeCharts() {
+            // Volume Trend Chart
+            const volumeCtx = document.getElementById('volumeTrendChart').getContext('2d');
+            charts.volumeTrend = new Chart(volumeCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Article Count'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: false,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Sentiment'
+                            },
+                            min: -1,
+                            max: 1
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+            
+            // Source Performance Chart
+            const sourceCtx = document.getElementById('sourcePerformanceChart').getContext('2d');
+            charts.sourcePerformance = new Chart(sourceCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            beginAtZero: true
+                        },
+                        x1: {
+                            type: 'linear',
+                            display: false,
+                            position: 'top',
+                            max: 100
+                        }
+                    }
+                }
+            });
+            
+            // Keyword Chart
+            const keywordCtx = document.getElementById('keywordChart').getContext('2d');
+            charts.keywords = new Chart(keywordCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        }
+        
+        async function loadDashboardData() {
+            try {
+                setLoading(true);
+                
+                // Load all data in parallel
+                const [statusData, overviewData, volumeData, sourceData, keywordData] = await Promise.all([
+                    fetch('/api/status').then(r => r.json()),
+                    fetch('/api/metrics/overview').then(r => r.json()),
+                    fetch('/api/charts/volume_trend?hours=24').then(r => r.json()),
+                    fetch('/api/charts/source_performance?days=7').then(r => r.json()),
+                    fetch('/api/charts/keyword_trends?days=7&limit=10').then(r => r.json())
+                ]);
+                
+                updateStatus(statusData);
+                updateOverviewMetrics(overviewData);
+                updateVolumeChart(volumeData);
+                updateSourceChart(sourceData);
+                updateKeywordChart(keywordData);
+                updateTrendingKeywords(overviewData.trending_keywords || []);
+                
+                // Load initial forecast
+                updateForecast('volume');
+                
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+                showError('Failed to load dashboard data');
+            } finally {
+                setLoading(false);
+            }
+        }
+        
+        function updateStatus(data) {
+            const statusIndicator = document.getElementById('systemStatus');
+            const statusText = document.getElementById('systemStatusText');
+            const lastUpdated = document.getElementById('lastUpdated');
+            
+            if (data.status === 'healthy') {
+                statusIndicator.className = 'status-indicator status-healthy';
+                statusText.textContent = 'System Healthy';
+            } else {
+                statusIndicator.className = 'status-indicator status-error';
+                statusText.textContent = 'System Issues';
+            }
+            
+            lastUpdated.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+        
+        function updateOverviewMetrics(data) {
+            const overview = data.overview || {};
+            
+            document.getElementById('articles24h').textContent = overview.articles_24h || '--';
+            document.getElementById('avgHourlyVolume').textContent = overview.avg_hourly_volume || '--';
+            document.getElementById('activeSources').textContent = overview.active_sources || '--';
+            document.getElementById('overallSentiment').textContent = (overview.overall_sentiment || 0).toFixed(3);
+            document.getElementById('cpuUsage').textContent = `${overview.avg_cpu_usage || 0}%`;
+            document.getElementById('memoryUsage').textContent = `${overview.avg_memory_mb || 0}MB`;
+        }
+        
+        function updateVolumeChart(data) {
+            if (data.error) {
+                console.error('Volume chart error:', data.error);
+                return;
+            }
+            
+            charts.volumeTrend.data = data;
+            charts.volumeTrend.update();
+        }
+        
+        function updateSourceChart(data) {
+            if (data.error) {
+                console.error('Source chart error:', data.error);
+                return;
+            }
+            
+            charts.sourcePerformance.data = data;
+            charts.sourcePerformance.update();
+        }
+        
+        function updateKeywordChart(data) {
+            if (data.error) {
+                console.error('Keyword chart error:', data.error);
+                return;
+            }
+            
+            // Convert to doughnut chart format
+            const colors = [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+            ];
+            
+            if (data.datasets && data.datasets[0]) {
+                data.datasets[0].backgroundColor = colors.slice(0, data.labels.length);
+                data.datasets[0].borderColor = colors.slice(0, data.labels.length);
+                data.datasets[0].borderWidth = 2;
+            }
+            
+            charts.keywords.data = data;
+            charts.keywords.update();
+        }
+        
+        function updateTrendingKeywords(keywords) {
+            const container = document.getElementById('trendingKeywords');
+            
+            if (!keywords || keywords.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center">No trending keywords available</p>';
+                return;
+            }
+            
+            let html = '';
+            keywords.forEach((keyword, index) => {
+                const trendClass = keyword.growth > 0 ? 'trend-up' : keyword.growth < 0 ? 'trend-down' : 'trend-stable';
+                const icon = keyword.growth > 0 ? 'fa-arrow-up' : keyword.growth < 0 ? 'fa-arrow-down' : 'fa-minus';
+                
+                html += `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <span class="keyword-tag">${keyword.keyword}</span>
+                            <small class="text-muted">${keyword.mentions} mentions</small>
+                        </div>
+                        <div class="${trendClass}">
+                            <i class="fas ${icon}"></i>
+                            ${Math.abs(keyword.growth).toFixed(1)}%
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        async function updateVolumeTrend(hours) {
+            try {
+                const data = await fetch(`/api/charts/volume_trend?hours=${hours}`).then(r => r.json());
+                updateVolumeChart(data);
+                
+                // Update button states
+                document.querySelectorAll('[onclick^="updateVolumeTrend"]').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                event.target.classList.add('active');
+            } catch (error) {
+                console.error('Error updating volume trend:', error);
+            }
+        }
+        
+        async function updateForecast(type) {
+            try {
+                const content = document.getElementById('forecastContent');
+                content.innerHTML = '<div class="text-center"><div class="spinner-border text-success" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+                
+                const data = await fetch(`/api/forecast/${type}?days=7`).then(r => r.json());
+                
+                if (data.error) {
+                    content.innerHTML = `<div class="alert alert-warning">${data.error}</div>`;
+                    return;
+                }
+                
+                let html = '';
+                
+                if (type === 'volume' && data.forecast_values) {
+                    const avg = data.forecast_values.reduce((a, b) => a + b, 0) / data.forecast_values.length;
+                    html = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Volume Forecast (7 days)</h6>
+                                <p class="h4 text-primary">${avg.toFixed(1)} articles/hour avg</p>
+                                <small class="text-muted">Model: ${data.model_used || 'Ensemble'}</small>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Forecast Confidence</h6>
+                                <p class="h4 text-success">${((data.forecast_accuracy || 0.5) * 100).toFixed(1)}%</p>
+                                <small class="text-muted">Based on historical accuracy</small>
+                            </div>
+                        </div>
+                    `;
+                } else if (type === 'sentiment' && data.ensemble_forecast) {
+                    const forecast = data.ensemble_forecast;
+                    html = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Sentiment Forecast</h6>
+                                <p class="h4 ${forecast.forecast_value > 0 ? 'text-success' : 'text-danger'}">${forecast.forecast_value.toFixed(3)}</p>
+                                <small class="text-muted">Current: ${(data.current_sentiment || 0).toFixed(3)}</small>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Forecast Confidence</h6>
+                                <p class="h4 text-info">${(forecast.confidence * 100).toFixed(1)}%</p>
+                                <small class="text-muted">Sentiment stability: ${((data.sentiment_stability_score || 0.5) * 100).toFixed(1)}%</small>
+                            </div>
+                        </div>
+                    `;
+                } else if (type === 'topics' && data.top_trending_keywords) {
+                    html = `
+                        <h6>Predicted Trending Topics (7 days)</h6>
+                        <div class="row">
+                    `;
+                    
+                    data.top_trending_keywords.slice(0, 6).forEach(topic => {
+                        const trendClass = topic.trend_direction === 'up' ? 'text-success' : 'text-danger';
+                        html += `
+                            <div class="col-md-4 mb-3">
+                                <div class="border rounded p-2">
+                                    <strong>${topic.keyword}</strong><br>
+                                    <small class="${trendClass}">
+                                        ${topic.trend_direction} (${topic.predicted_growth.toFixed(1)}%)
+                                    </small><br>
+                                    <small class="text-muted">${topic.total_mentions} mentions</small>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                }
+                
+                content.innerHTML = html;
+                
+                // Update button states
+                document.querySelectorAll('[onclick^="updateForecast"]').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                event.target.classList.add('active');
+                
+            } catch (error) {
+                console.error('Error updating forecast:', error);
+                document.getElementById('forecastContent').innerHTML = '<div class="alert alert-danger">Error loading forecast</div>';
+            }
+        }
+        
+        function refreshDashboard() {
+            const btn = document.getElementById('refreshBtn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            
+            loadDashboardData().finally(() => {
+                btn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+            });
+        }
+        
+        function setLoading(loading) {
+            const body = document.body;
+            if (loading) {
+                body.classList.add('loading');
+            } else {
+                body.classList.remove('loading');
+            }
+        }
+        
+        function showError(message) {
+            // Simple error handling - in production, use a proper notification system
+            console.error(message);
+        }
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        });
+    </script>
+</body>
+</html>

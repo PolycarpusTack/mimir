@@ -1,0 +1,63 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mimir
+
+bases:
+  - ../../base
+
+resources:
+  # Production-specific resources
+  - multi-zone-deployment.yaml
+  - cluster-autoscaler.yaml
+
+patchesStrategicMerge:
+  # Scale up for production
+  - patches/scale-production.yaml
+  # Production resource limits
+  - patches/resources-production.yaml
+  # Production security settings
+  - patches/security-production.yaml
+
+configMapGenerator:
+  - name: mimir-production-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=info
+      - ENABLE_PROFILING=false
+      - ENABLE_METRICS=true
+      - BACKUP_ENABLED=true
+      - HA_MODE=true
+
+secretGenerator:
+  - name: mimir-production-secrets
+    behavior: merge
+    envs:
+      - secrets.env
+
+replicas:
+  - name: mimir-api
+    count: 5
+  - name: mimir-worker
+    count: 5
+  - name: mimir-analytics
+    count: 3
+  - name: postgres-standby
+    count: 2
+  - name: redis
+    count: 3
+
+images:
+  - name: mimir
+    newName: your-registry.com/mimir
+    newTag: v1.0.0-stable
+  - name: mimir-api
+    newName: your-registry.com/mimir
+    newTag: api-v1.0.0-stable
+  - name: mimir-worker
+    newName: your-registry.com/mimir
+    newTag: worker-v1.0.0-stable
+  - name: mimir-analytics
+    newName: your-registry.com/mimir
+    newTag: analytics-v1.0.0-stable

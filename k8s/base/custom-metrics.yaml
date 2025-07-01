@@ -1,0 +1,208 @@
+# Custom metrics configuration for advanced autoscaling
+# Uses Prometheus Adapter to expose custom metrics to HPA
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-adapter-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus-adapter
+    app.kubernetes.io/component: metrics
+data:
+  config.yaml: |
+    rules:
+    # HTTP request rate per pod
+    - seriesQuery: 'nginx_ingress_controller_requests_total{namespace="mimir"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^nginx_ingress_controller_requests_total"
+        as: "http_requests_per_second"
+      metricsQuery: 'sum(rate(nginx_ingress_controller_requests_total{namespace="mimir",<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)'
+    
+    # Celery queue length
+    - seriesQuery: 'celery_queue_length{namespace="mimir"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+      name:
+        matches: "^celery_queue_length"
+        as: "celery_queue_length"
+      metricsQuery: 'celery_queue_length{namespace="mimir",<<.LabelMatchers>>}'
+    
+    # Celery tasks pending
+    - seriesQuery: 'celery_tasks_total{namespace="mimir",state="PENDING"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+      name:
+        matches: "^celery_tasks_total"
+        as: "celery_tasks_pending"
+      metricsQuery: 'celery_tasks_total{namespace="mimir",state="PENDING",<<.LabelMatchers>>}'
+    
+    # Analytics report queue size
+    - seriesQuery: 'analytics_report_queue_size{namespace="mimir"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+      name:
+        matches: "^analytics_report_queue_size"
+        as: "analytics_report_queue_size"
+      metricsQuery: 'analytics_report_queue_size{namespace="mimir",<<.LabelMatchers>>}'
+    
+    # Database connection pool usage
+    - seriesQuery: 'pg_stat_database_numbackends{namespace="mimir"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+      name:
+        matches: "^pg_stat_database_numbackends"
+        as: "database_connections"
+      metricsQuery: 'pg_stat_database_numbackends{namespace="mimir",<<.LabelMatchers>>}'
+    
+    # Redis memory usage
+    - seriesQuery: 'redis_memory_used_bytes{namespace="mimir"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+      name:
+        matches: "^redis_memory_used_bytes"
+        as: "redis_memory_usage"
+      metricsQuery: 'redis_memory_used_bytes{namespace="mimir",<<.LabelMatchers>>}'
+    
+    # Custom application metrics
+    - seriesQuery: 'mimir_api_response_time_seconds{namespace="mimir"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^mimir_api_response_time_seconds"
+        as: "api_response_time_p95"
+      metricsQuery: 'histogram_quantile(0.95, sum(rate(mimir_api_response_time_seconds_bucket{namespace="mimir",<<.LabelMatchers>>}[5m])) by (le, <<.GroupBy>>))'
+    
+    # Article processing rate
+    - seriesQuery: 'mimir_articles_processed_total{namespace="mimir"}'
+      resources:
+        overrides:
+          namespace: {resource: "namespace"}
+          pod: {resource: "pod"}
+      name:
+        matches: "^mimir_articles_processed_total"
+        as: "articles_processing_rate"
+      metricsQuery: 'sum(rate(mimir_articles_processed_total{namespace="mimir",<<.LabelMatchers>>}[5m])) by (<<.GroupBy>>)'
+---
+# ServiceMonitor for Mimir application metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mimir-app-metrics
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: mimir
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+      targetLabel: app
+    - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+      targetLabel: component
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+---
+# PrometheusRule for custom alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mimir-autoscaling-alerts
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: monitoring
+spec:
+  groups:
+  - name: mimir-autoscaling
+    interval: 30s
+    rules:
+    # High load alerts
+    - alert: MimirHighCPUUsage
+      expr: |
+        (
+          sum(rate(container_cpu_usage_seconds_total{namespace="mimir"}[5m])) by (pod, container)
+          / sum(container_spec_cpu_quota{namespace="mimir"} / container_spec_cpu_period{namespace="mimir"}) by (pod, container)
+        ) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: autoscaling
+      annotations:
+        summary: "High CPU usage detected"
+        description: "Pod {{ $labels.pod }} has CPU usage above 80% for 5 minutes"
+    
+    - alert: MimirHighMemoryUsage
+      expr: |
+        (
+          sum(container_memory_working_set_bytes{namespace="mimir"}) by (pod, container)
+          / sum(container_spec_memory_limit_bytes{namespace="mimir"}) by (pod, container)
+        ) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: autoscaling
+      annotations:
+        summary: "High memory usage detected"
+        description: "Pod {{ $labels.pod }} has memory usage above 80% for 5 minutes"
+    
+    # Queue length alerts
+    - alert: MimirHighCeleryQueueLength
+      expr: celery_queue_length{namespace="mimir"} > 1000
+      for: 5m
+      labels:
+        severity: warning
+        component: worker
+      annotations:
+        summary: "High Celery queue length"
+        description: "Celery queue {{ $labels.queue_name }} has more than 1000 pending tasks"
+    
+    # API response time alerts
+    - alert: MimirSlowAPIResponse
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(mimir_api_response_time_seconds_bucket{namespace="mimir"}[5m])) by (le)
+        ) > 2
+      for: 5m
+      labels:
+        severity: warning
+        component: api
+      annotations:
+        summary: "Slow API response times"
+        description: "95th percentile API response time is above 2 seconds"
+    
+    # Autoscaling effectiveness
+    - alert: MimirAutoscalingNotEffective
+      expr: |
+        avg_over_time(kube_deployment_status_replicas{namespace="mimir"}[10m])
+        == avg_over_time(kube_deployment_spec_replicas{namespace="mimir"}[10m])
+        and on (deployment) kube_deployment_status_replicas{namespace="mimir"} 
+        == on (deployment) kube_deployment_spec_replicas{namespace="mimir"}
+      for: 30m
+      labels:
+        severity: info
+        component: autoscaling
+      annotations:
+        summary: "Autoscaling may not be effective"
+        description: "Deployment {{ $labels.deployment }} has not scaled in 30 minutes despite load"

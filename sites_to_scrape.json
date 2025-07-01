@@ -1,0 +1,142 @@
+{
+  "sites": [
+    {
+      "name": "TechCrunch RSS",
+      "url": "https://techcrunch.com/feed/",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology",
+      "robots_friendly": true
+    },
+    {
+      "name": "The Verge RSS",
+      "url": "https://www.theverge.com/rss/index.xml",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology"
+    },
+    {
+      "name": "VentureBeat RSS",
+      "url": "https://feeds.feedburner.com/venturebeat/SZYF",
+      "type": "rss",
+      "enabled": false,
+      "category": "business"
+    },
+    {
+      "name": "Example News Site (HTML)",
+      "url": "https://example-news.com/articles",
+      "type": "html",
+      "enabled": false,
+      "category": "general",
+      "selectors": {
+        "overview_article_link": "article.post-item a.post-link",
+        "detail_title": "h1.post-title",
+        "detail_date": "time.post-date",
+        "detail_content": "div.post-content",
+        "detail_author": "span.post-author"
+      },
+      "date_format": "%B %d, %Y",
+      "pagination": {
+        "enabled": true,
+        "next_page_selector": "a.next-page",
+        "max_pages": 5
+      }
+    },
+    {
+      "name": "EBU",
+      "type": "html",
+      "enabled": false,
+      "url": "https://www.ebu.ch/home",
+      "article_selector": "article",
+      "title_selector": "h1",
+      "content_selector": "p",
+      "note": "Blocked by robots.txt"
+    },
+    {
+      "name": "RTL",
+      "type": "html",
+      "enabled": false,
+      "url": "https://company.rtl.com/",
+      "article_selector": "article",
+      "title_selector": "h1",
+      "content_selector": "p",
+      "note": "CSS selector syntax error - needs investigation"
+    },
+    {
+      "name": "TVB Europe",
+      "type": "html",
+      "enabled": false,
+      "url": "https://www.tvbeurope.com/",
+      "article_selector": "article",
+      "title_selector": "h1",
+      "content_selector": "p",
+      "note": "Blocked by robots.txt"
+    },
+    {
+      "name": "Broadcast NOW (UK)",
+      "url": "https://www.broadcastnow.co.uk/rss",
+      "type": "rss",
+      "enabled": true,
+      "note": "404 error - RSS feed not found"
+    },
+    {
+      "name": "BroadbandTV News",
+      "url": "https://www.broadbandtvnews.com/feed/",
+      "type": "rss",
+      "enabled": true
+    },
+    {
+      "name": "IBC",
+      "url": "https://www.ibc.org/rss",
+      "type": "rss",
+      "enabled": true,
+      "note": "404 error - RSS feed not found"
+    },
+    {
+      "name": "BBC Technology",
+      "url": "http://feeds.bbci.co.uk/news/technology/rss.xml",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology"
+    },
+    {
+      "name": "Reuters Technology",
+      "url": "https://www.reuters.com/technology/rss",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology"
+    },
+    {
+      "name": "Ars Technica",
+      "url": "https://feeds.arstechnica.com/arstechnica/index",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology",
+      "note": "Well-respected tech journalism, RSS-friendly"
+    },
+    {
+      "name": "Engadget",
+      "url": "https://www.engadget.com/rss.xml",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology",
+      "note": "Consumer tech focus, reliable RSS"
+    },
+    {
+      "name": "Hacker News (Top Stories)",
+      "url": "https://hnrss.org/frontpage",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology",
+      "note": "Tech community news, third-party RSS service"
+    },
+    {
+      "name": "Slashdot",
+      "url": "http://rss.slashdot.org/Slashdot/slashdotMain",
+      "type": "rss",
+      "enabled": true,
+      "category": "technology",
+      "note": "News for nerds, original RSS pioneer"
+    }
+  ]
+}

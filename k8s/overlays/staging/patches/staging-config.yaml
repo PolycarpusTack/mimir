@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-web
+spec:
+  template:
+    spec:
+      containers:
+      - name: mimir-web
+        env:
+        - name: ENVIRONMENT
+          value: "staging"
+        - name: DEBUG
+          value: "false"
+        - name: LOG_LEVEL
+          value: "INFO"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: mimir-api
+        env:
+        - name: ENVIRONMENT
+          value: "staging"
+        - name: DEBUG
+          value: "false"
+        - name: LOG_LEVEL
+          value: "INFO"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-worker
+spec:
+  template:
+    spec:
+      containers:
+      - name: mimir-worker
+        env:
+        - name: ENVIRONMENT
+          value: "staging"
+        - name: WORKER_CONCURRENCY
+          value: "2"
+        - name: LOG_LEVEL
+          value: "INFO"

@@ -1,0 +1,111 @@
+# Mimir Analytics Service - Dashboard and Analytics Processing
+# Optimized for data processing and visualization workloads
+
+ARG PYTHON_VERSION=3.11.7
+ARG ALPINE_VERSION=3.19
+
+# ================================
+# Stage 1: Build Dependencies
+# ================================
+FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+# Install build dependencies including data science packages
+RUN apk add --no-cache \
+    gcc \
+    g++ \
+    gfortran \
+    musl-dev \
+    postgresql-dev \
+    libffi-dev \
+    openssl-dev \
+    linux-headers \
+    # For data science packages
+    openblas-dev \
+    lapack-dev \
+    freetype-dev \
+    libpng-dev \
+    pkgconfig
+
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt requirements_api.txt ./
+RUN pip install --no-cache-dir --user --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --user -r requirements.txt && \
+    pip install --no-cache-dir --user -r requirements_api.txt
+
+# ================================
+# Stage 2: Production Runtime
+# ================================
+FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS production
+
+# Security: Create non-root user
+RUN addgroup -g 1001 -S mimir && \
+    adduser -S -D -u 1001 -G mimir mimir
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    postgresql-client \
+    libpq \
+    libffi \
+    openssl \
+    ca-certificates \
+    curl \
+    dumb-init \
+    # For data science runtime
+    openblas \
+    lapack \
+    freetype \
+    libpng
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/mimir/.local
+
+# Set up environment
+ENV PATH=/home/mimir/.local/bin:$PATH \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ENVIRONMENT=production \
+    PYTHONHASHSEED=random \
+    # Analytics-specific settings
+    MPLBACKEND=Agg \
+    # Performance optimizations
+    OMP_NUM_THREADS=4 \
+    OPENBLAS_NUM_THREADS=4
+
+# Create application directories
+WORKDIR /app
+RUN mkdir -p /app/logs /app/data /app/reports && \
+    chown -R mimir:mimir /app
+
+# Copy analytics-related files
+COPY --chown=mimir:mimir analytics/ ./analytics/
+COPY --chown=mimir:mimir analytics_manager.py ./
+COPY --chown=mimir:mimir db_adapter.py db_manager_postgres.py config.json ./
+COPY --chown=mimir:mimir static/ ./static/
+COPY --chown=mimir:mimir templates/ ./templates/
+
+# Remove unnecessary files
+RUN find /app -name "__pycache__" -type d -exec rm -rf {} + || true && \
+    find /app -name "*.pyc" -delete || true
+
+# Set proper permissions
+RUN find /app -type f -name "*.py" -exec chmod 644 {} \; && \
+    find /app -type d -exec chmod 755 {} \;
+
+# Switch to non-root user
+USER mimir
+
+# Health check for analytics service
+HEALTHCHECK --interval=60s --timeout=30s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5001/health || exit 1
+
+# Expose analytics dashboard port
+EXPOSE 5001
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start analytics dashboard
+CMD ["python", "analytics_manager.py", "dashboard", "--port", "5001", "--host", "0.0.0.0"]

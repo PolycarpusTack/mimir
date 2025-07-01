@@ -1,0 +1,172 @@
+# Vertical Pod Autoscaler configurations for Mimir services
+# These automatically adjust resource requests and limits based on actual usage
+
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: mimir-api-vpa
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: mimir
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mimir-api
+  updatePolicy:
+    updateMode: "Auto"  # Can be "Off", "Initial", or "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: mimir-api
+      minAllowed:
+        cpu: 250m
+        memory: 256Mi
+      maxAllowed:
+        cpu: 4
+        memory: 4Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: mimir-web-vpa
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-web
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: mimir
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mimir-web
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: mimir-web
+      minAllowed:
+        cpu: 100m
+        memory: 128Mi
+      maxAllowed:
+        cpu: 2
+        memory: 2Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: mimir-worker-vpa
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: mimir
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mimir-worker
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: mimir-worker
+      minAllowed:
+        cpu: 500m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 8
+        memory: 8Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+      # Mode can be "Auto", "Recreate", or "Off"
+      mode: Auto
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: mimir-analytics-vpa
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-analytics
+    app.kubernetes.io/component: analytics
+    app.kubernetes.io/part-of: mimir
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mimir-analytics
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: mimir-analytics
+      minAllowed:
+        cpu: 250m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 4
+        memory: 6Gi
+      controlledResources: ["cpu", "memory"]
+      controlledValues: RequestsAndLimits
+---
+# VPA for database components (recommendation mode only)
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: postgres-vpa
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: mimir
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: postgres
+  updatePolicy:
+    updateMode: "Off"  # Only recommendations, no automatic updates
+  resourcePolicy:
+    containerPolicies:
+    - containerName: postgres
+      minAllowed:
+        cpu: 250m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 8
+        memory: 16Gi
+      controlledResources: ["cpu", "memory"]
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: redis-vpa
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: mimir
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: redis
+  updatePolicy:
+    updateMode: "Off"  # Only recommendations, no automatic updates
+  resourcePolicy:
+    containerPolicies:
+    - containerName: redis
+      minAllowed:
+        cpu: 100m
+        memory: 256Mi
+      maxAllowed:
+        cpu: 4
+        memory: 8Gi
+      controlledResources: ["cpu", "memory"]

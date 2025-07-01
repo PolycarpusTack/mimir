@@ -1,0 +1,462 @@
+# Structured Logging Guide and Examples for Mimir Applications
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: structured-logging-guide
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: logging
+data:
+  python-logging-config.py: |
+    """
+    Structured logging configuration for Mimir Python applications
+    """
+    import logging
+    import json
+    import sys
+    from datetime import datetime
+    from typing import Dict, Any, Optional
+    import traceback
+    import uuid
+    from contextvars import ContextVar
+    
+    # Context variables for request tracing
+    request_id_var: ContextVar[Optional[str]] = ContextVar('request_id', default=None)
+    user_id_var: ContextVar[Optional[str]] = ContextVar('user_id', default=None)
+    
+    class StructuredFormatter(logging.Formatter):
+        """Custom formatter for structured JSON logging"""
+        
+        def format(self, record: logging.LogRecord) -> str:
+            # Base log structure
+            log_data = {
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+                "module": record.module,
+                "function": record.funcName,
+                "line": record.lineno,
+                "thread": record.thread,
+                "process": record.process,
+            }
+            
+            # Add context information
+            request_id = request_id_var.get()
+            if request_id:
+                log_data["request_id"] = request_id
+                log_data["trace_id"] = request_id  # For compatibility
+            
+            user_id = user_id_var.get()
+            if user_id:
+                log_data["user_id"] = user_id
+            
+            # Add extra fields from the log record
+            extra_fields = {}
+            for key, value in record.__dict__.items():
+                if key not in [
+                    'name', 'msg', 'args', 'levelname', 'levelno', 'pathname',
+                    'filename', 'module', 'exc_info', 'exc_text', 'stack_info',
+                    'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
+                    'thread', 'threadName', 'processName', 'process', 'getMessage'
+                ]:
+                    extra_fields[key] = value
+            
+            if extra_fields:
+                log_data.update(extra_fields)
+            
+            # Handle exceptions
+            if record.exc_info:
+                log_data["error"] = {
+                    "type": record.exc_info[0].__name__ if record.exc_info[0] else None,
+                    "message": str(record.exc_info[1]) if record.exc_info[1] else None,
+                    "stack_trace": traceback.format_exception(*record.exc_info)
+                }
+            
+            return json.dumps(log_data, ensure_ascii=False)
+    
+    def setup_logging(
+        level: str = "INFO",
+        component: str = "mimir",
+        environment: str = "production"
+    ) -> None:
+        """Setup structured logging for the application"""
+        
+        # Create root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(getattr(logging, level.upper()))
+        
+        # Remove existing handlers
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+        
+        # Create console handler with structured formatter
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = StructuredFormatter()
+        handler.setFormatter(formatter)
+        root_logger.addHandler(handler)
+        
+        # Add component and environment to all logs
+        old_factory = logging.getLogRecordFactory()
+        
+        def record_factory(*args, **kwargs):
+            record = old_factory(*args, **kwargs)
+            record.component = component
+            record.environment = environment
+            return record
+        
+        logging.setLogRecordFactory(record_factory)
+    
+    # Context managers for request tracking
+    class LogContext:
+        """Context manager for adding request/user context to logs"""
+        
+        def __init__(self, request_id: str = None, user_id: str = None):
+            self.request_id = request_id or str(uuid.uuid4())
+            self.user_id = user_id
+            self.request_token = None
+            self.user_token = None
+        
+        def __enter__(self):
+            self.request_token = request_id_var.set(self.request_id)
+            if self.user_id:
+                self.user_token = user_id_var.set(self.user_id)
+            return self
+        
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            request_id_var.reset(self.request_token)
+            if self.user_token:
+                user_id_var.reset(self.user_token)
+    
+    # Decorators for automatic logging
+    def log_function_call(logger: logging.Logger = None):
+        """Decorator to log function entry/exit with timing"""
+        def decorator(func):
+            nonlocal logger
+            if logger is None:
+                logger = logging.getLogger(func.__module__)
+            
+            def wrapper(*args, **kwargs):
+                start_time = datetime.utcnow()
+                logger.info(
+                    f"Entering {func.__name__}",
+                    extra={
+                        "event": "function_entry",
+                        "function": func.__name__,
+                        "args_count": len(args),
+                        "kwargs_count": len(kwargs)
+                    }
+                )
+                
+                try:
+                    result = func(*args, **kwargs)
+                    duration = (datetime.utcnow() - start_time).total_seconds()
+                    
+                    logger.info(
+                        f"Exiting {func.__name__}",
+                        extra={
+                            "event": "function_exit",
+                            "function": func.__name__,
+                            "duration_seconds": duration,
+                            "success": True
+                        }
+                    )
+                    return result
+                    
+                except Exception as e:
+                    duration = (datetime.utcnow() - start_time).total_seconds()
+                    logger.error(
+                        f"Error in {func.__name__}: {str(e)}",
+                        extra={
+                            "event": "function_error",
+                            "function": func.__name__,
+                            "duration_seconds": duration,
+                            "error_type": type(e).__name__,
+                            "success": False
+                        },
+                        exc_info=True
+                    )
+                    raise
+            
+            return wrapper
+        return decorator
+    
+    # Usage examples
+    if __name__ == "__main__":
+        # Setup logging
+        setup_logging(level="INFO", component="mimir-api")
+        
+        logger = logging.getLogger(__name__)
+        
+        # Basic structured logging
+        logger.info("Application started", extra={
+            "event": "app_start",
+            "version": "1.0.0",
+            "environment": "production"
+        })
+        
+        # Using context manager
+        with LogContext(request_id="req-123", user_id="user-456"):
+            logger.info("Processing user request", extra={
+                "event": "request_processing",
+                "endpoint": "/api/articles",
+                "method": "GET"
+            })
+            
+            # Simulate an error
+            try:
+                raise ValueError("Something went wrong")
+            except ValueError:
+                logger.error("Failed to process request", extra={
+                    "event": "request_error",
+                    "endpoint": "/api/articles"
+                }, exc_info=True)
+  
+  fastapi-logging-middleware.py: |
+    """
+    FastAPI middleware for structured request logging
+    """
+    import time
+    import uuid
+    from typing import Callable
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import Response
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    class StructuredLoggingMiddleware(BaseHTTPMiddleware):
+        """Middleware to add structured logging to FastAPI requests"""
+        
+        async def dispatch(self, request: Request, call_next: Callable) -> Response:
+            # Generate request ID
+            request_id = str(uuid.uuid4())
+            
+            # Extract client information
+            client_ip = request.client.host if request.client else "unknown"
+            user_agent = request.headers.get("user-agent", "unknown")
+            
+            # Start timing
+            start_time = time.time()
+            
+            # Log request start
+            logger.info("Request started", extra={
+                "event": "request_start",
+                "request_id": request_id,
+                "method": request.method,
+                "url": str(request.url),
+                "path": request.url.path,
+                "query_params": dict(request.query_params),
+                "client_ip": client_ip,
+                "user_agent": user_agent,
+                "headers": dict(request.headers)
+            })
+            
+            # Set request ID in context
+            with LogContext(request_id=request_id):
+                try:
+                    # Process request
+                    response = await call_next(request)
+                    
+                    # Calculate duration
+                    duration = time.time() - start_time
+                    
+                    # Log successful response
+                    logger.info("Request completed", extra={
+                        "event": "request_complete",
+                        "request_id": request_id,
+                        "status_code": response.status_code,
+                        "duration_seconds": duration,
+                        "response_size": response.headers.get("content-length", 0)
+                    })
+                    
+                    # Add request ID to response headers
+                    response.headers["X-Request-ID"] = request_id
+                    
+                    return response
+                    
+                except Exception as e:
+                    duration = time.time() - start_time
+                    
+                    # Log error
+                    logger.error("Request failed", extra={
+                        "event": "request_error",
+                        "request_id": request_id,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "duration_seconds": duration
+                    }, exc_info=True)
+                    
+                    raise
+  
+  celery-logging-setup.py: |
+    """
+    Celery task logging configuration
+    """
+    from celery import Celery
+    from celery.signals import (
+        task_prerun, task_postrun, task_failure, 
+        task_retry, worker_ready
+    )
+    import logging
+    import time
+    
+    logger = logging.getLogger(__name__)
+    
+    @task_prerun.connect
+    def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **kwds):
+        """Log task start"""
+        logger.info("Task started", extra={
+            "event": "task_start",
+            "task_id": task_id,
+            "task_name": task.name if task else sender,
+            "args_count": len(args) if args else 0,
+            "kwargs_count": len(kwargs) if kwargs else 0
+        })
+    
+    @task_postrun.connect
+    def task_postrun_handler(sender=None, task_id=None, task=None, args=None, 
+                           kwargs=None, retval=None, state=None, **kwds):
+        """Log task completion"""
+        logger.info("Task completed", extra={
+            "event": "task_complete",
+            "task_id": task_id,
+            "task_name": task.name if task else sender,
+            "state": state,
+            "success": state == "SUCCESS"
+        })
+    
+    @task_failure.connect
+    def task_failure_handler(sender=None, task_id=None, exception=None, 
+                           traceback=None, einfo=None, **kwds):
+        """Log task failure"""
+        logger.error("Task failed", extra={
+            "event": "task_failure",
+            "task_id": task_id,
+            "task_name": sender.name if hasattr(sender, 'name') else str(sender),
+            "error_type": type(exception).__name__ if exception else "Unknown",
+            "error_message": str(exception) if exception else "Unknown error"
+        }, exc_info=einfo)
+    
+    @task_retry.connect
+    def task_retry_handler(sender=None, task_id=None, reason=None, 
+                          einfo=None, **kwds):
+        """Log task retry"""
+        logger.warning("Task retry", extra={
+            "event": "task_retry",
+            "task_id": task_id,
+            "task_name": sender.name if hasattr(sender, 'name') else str(sender),
+            "reason": str(reason) if reason else "Unknown",
+            "retry_count": sender.request.retries if hasattr(sender, 'request') else 0
+        })
+  
+  logging-best-practices.md: |
+    # Structured Logging Best Practices for Mimir
+    
+    ## Log Levels
+    
+    - **DEBUG**: Detailed diagnostic information for development
+    - **INFO**: General operational information
+    - **WARNING**: Warning messages for unusual but handled situations
+    - **ERROR**: Error messages for serious problems
+    - **CRITICAL**: Critical errors that may cause application failure
+    
+    ## Required Fields
+    
+    All log entries should include:
+    - `timestamp`: ISO 8601 UTC timestamp
+    - `level`: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    - `component`: Service/component name (api, worker, scraper, analytics)
+    - `message`: Human-readable log message
+    - `request_id`: Unique identifier for request tracing (when applicable)
+    
+    ## Common Event Types
+    
+    ### API Events
+    ```json
+    {
+      "event": "request_start|request_complete|request_error",
+      "method": "GET|POST|PUT|DELETE",
+      "endpoint": "/api/articles",
+      "status_code": 200,
+      "duration_seconds": 0.123,
+      "user_id": "user-123"
+    }
+    ```
+    
+    ### Scraping Events
+    ```json
+    {
+      "event": "scrape_start|scrape_complete|scrape_error",
+      "source": "techcrunch.com",
+      "articles_found": 25,
+      "articles_new": 5,
+      "duration_seconds": 12.5
+    }
+    ```
+    
+    ### Worker Events
+    ```json
+    {
+      "event": "task_start|task_complete|task_error",
+      "task_id": "celery-task-123",
+      "task_name": "process_article",
+      "queue": "analytics",
+      "retry_count": 0
+    }
+    ```
+    
+    ### Database Events
+    ```json
+    {
+      "event": "query_start|query_complete|query_error",
+      "query_type": "SELECT|INSERT|UPDATE|DELETE",
+      "table": "articles",
+      "duration_seconds": 0.045,
+      "rows_affected": 1
+    }
+    ```
+    
+    ## Sensitive Data Handling
+    
+    Never log:
+    - Passwords or API keys
+    - Personal user data (PII)
+    - Session tokens or JWT contents
+    - Credit card or payment information
+    
+    ## Performance Considerations
+    
+    - Use structured logging with JSON format
+    - Avoid logging in tight loops
+    - Use async logging for high-volume applications
+    - Implement log sampling for verbose components
+    
+    ## Correlation and Tracing
+    
+    - Include `request_id` for request tracing
+    - Use consistent field names across services
+    - Include `user_id` when available
+    - Add `correlation_id` for cross-service operations
+    
+    ## Example Implementation
+    
+    ```python
+    import logging
+    from structured_logging import setup_logging, LogContext
+    
+    # Setup at application start
+    setup_logging(level="INFO", component="mimir-api")
+    logger = logging.getLogger(__name__)
+    
+    # In request handler
+    with LogContext(request_id=request.headers.get("X-Request-ID")):
+        logger.info("Processing article", extra={
+            "event": "article_processing",
+            "article_id": article.id,
+            "source": article.source
+        })
+    ```

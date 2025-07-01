@@ -1,0 +1,409 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  release:
+    types: [published]
+
+env:
+  PYTHON_VERSION: 3.11
+  NODE_VERSION: 18
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Security and Quality Checks
+  security-scan:
+    name: Security & Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit safety semgrep flake8 black mypy pytest-cov
+
+      - name: Security scan with Bandit
+        run: |
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . -f txt
+
+      - name: Dependency vulnerability scan
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Semgrep security analysis
+        run: |
+          python -m semgrep --config=auto --json --output=semgrep-report.json . || true
+
+      - name: Code style check
+        run: |
+          black --check --diff .
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+      - name: Type checking
+        run: |
+          mypy . --ignore-missing-imports --strict-optional || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+            semgrep-report.json
+
+  # Unit and Integration Tests
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.11.0-pg14
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: mimir_user
+          POSTGRES_DB: mimir_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          POSTGRES_PASSWORD: test_password
+        run: |
+          python db_manager_postgres.py --init
+          alembic upgrade head
+
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          REDIS_URL: redis://localhost:6379/0
+          POSTGRES_PASSWORD: test_password
+          JWT_SECRET_KEY: test-secret-key-for-testing-only
+          ENVIRONMENT: test
+        run: |
+          pytest tests/ -v --cov=. --cov-report=xml --cov-report=html --cov-fail-under=70
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-results
+          path: |
+            htmlcov/
+            coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  # Performance Testing
+  performance-test:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install locust
+
+      - name: Run performance tests
+        run: |
+          # Start the application in background
+          python web_interface.py &
+          sleep 10
+          
+          # Run performance tests
+          locust -f tests/locustfile.py --headless --users 50 --spawn-rate 5 --run-time 60s --host http://localhost:5000
+
+  # Build and Push Docker Images
+  build:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: [security-scan, test]
+    if: github.event_name == 'push' || github.event_name == 'release'
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push main image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.api
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Analytics image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.analytics
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-analytics:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.worker
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Container Security Scanning
+  container-security:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'release'
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, container-security]
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://mimir-staging.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Deploy to staging
+        env:
+          KUBE_CONFIG: ${{ secrets.STAGING_KUBE_CONFIG }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "$KUBE_CONFIG" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+          
+          # Update image tags in manifests
+          cd k8s/overlays/staging
+          kustomize edit set image mimir=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          kustomize edit set image mimir-api=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-api:${{ github.sha }}
+          kustomize edit set image mimir-analytics=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-analytics:${{ github.sha }}
+          kustomize edit set image mimir-worker=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.sha }}
+          
+          # Apply to cluster
+          kubectl apply -k .
+          kubectl rollout status deployment/mimir-web -n mimir-staging
+          kubectl rollout status deployment/mimir-api -n mimir-staging
+
+      - name: Run smoke tests
+        run: |
+          # Wait for deployment
+          sleep 30
+          
+          # Basic health check
+          curl -f http://mimir-staging.example.com/health || exit 1
+          curl -f http://mimir-staging.example.com/api/health || exit 1
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, container-security]
+    if: github.event_name == 'release'
+    environment:
+      name: production
+      url: https://mimir.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Deploy to production
+        env:
+          KUBE_CONFIG: ${{ secrets.PRODUCTION_KUBE_CONFIG }}
+          IMAGE_TAG: ${{ github.ref_name }}
+        run: |
+          echo "$KUBE_CONFIG" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+          
+          # Update image tags in manifests
+          cd k8s/overlays/production
+          kustomize edit set image mimir=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          kustomize edit set image mimir-api=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-api:${{ github.sha }}
+          kustomize edit set image mimir-analytics=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-analytics:${{ github.sha }}
+          kustomize edit set image mimir-worker=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-worker:${{ github.sha }}
+          
+          # Apply with blue-green deployment strategy
+          kubectl apply -k .
+          kubectl rollout status deployment/mimir-web -n mimir-production --timeout=600s
+          kubectl rollout status deployment/mimir-api -n mimir-production --timeout=600s
+
+      - name: Run production smoke tests
+        run: |
+          # Wait for deployment
+          sleep 60
+          
+          # Comprehensive health checks
+          curl -f https://mimir.example.com/health || exit 1
+          curl -f https://mimir.example.com/api/health || exit 1
+          curl -f https://mimir.example.com/api/metrics || exit 1
+
+      - name: Notify deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          text: 'Production deployment completed: ${{ github.ref_name }}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Cleanup old images
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: github.event_name == 'release'
+    steps:
+      - name: Delete old images
+        uses: actions/delete-package-versions@v4
+        with:
+          package-name: mimir
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: true

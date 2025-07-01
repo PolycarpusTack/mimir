@@ -1,0 +1,413 @@
+# Log Management and Lifecycle Policies
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-ilm-policies
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/component: logging
+data:
+  setup-ilm.sh: |
+    #!/bin/bash
+    set -e
+    
+    ELASTICSEARCH_URL="https://elasticsearch:9200"
+    ELASTIC_PASSWORD="${ELASTIC_PASSWORD}"
+    
+    echo "Setting up Index Lifecycle Management policies..."
+    
+    # Mimir application logs policy
+    curl -k -X PUT "${ELASTICSEARCH_URL}/_ilm/policy/mimir-ilm-policy" \
+      -u "elastic:${ELASTIC_PASSWORD}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "policy": {
+          "phases": {
+            "hot": {
+              "actions": {
+                "rollover": {
+                  "max_size": "10GB",
+                  "max_age": "1d",
+                  "max_docs": 10000000
+                },
+                "set_priority": {
+                  "priority": 100
+                }
+              }
+            },
+            "warm": {
+              "min_age": "2d",
+              "actions": {
+                "set_priority": {
+                  "priority": 50
+                },
+                "allocate": {
+                  "number_of_replicas": 0
+                },
+                "forcemerge": {
+                  "max_num_segments": 1
+                }
+              }
+            },
+            "cold": {
+              "min_age": "7d",
+              "actions": {
+                "set_priority": {
+                  "priority": 0
+                },
+                "allocate": {
+                  "number_of_replicas": 0
+                }
+              }
+            },
+            "delete": {
+              "min_age": "30d"
+            }
+          }
+        }
+      }'
+    
+    # Kubernetes system logs policy (shorter retention)
+    curl -k -X PUT "${ELASTICSEARCH_URL}/_ilm/policy/kubernetes-ilm-policy" \
+      -u "elastic:${ELASTIC_PASSWORD}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "policy": {
+          "phases": {
+            "hot": {
+              "actions": {
+                "rollover": {
+                  "max_size": "5GB",
+                  "max_age": "1d"
+                },
+                "set_priority": {
+                  "priority": 100
+                }
+              }
+            },
+            "warm": {
+              "min_age": "1d",
+              "actions": {
+                "set_priority": {
+                  "priority": 50
+                },
+                "allocate": {
+                  "number_of_replicas": 0
+                }
+              }
+            },
+            "delete": {
+              "min_age": "7d"
+            }
+          }
+        }
+      }'
+    
+    # Create index templates
+    curl -k -X PUT "${ELASTICSEARCH_URL}/_index_template/mimir-logs" \
+      -u "elastic:${ELASTIC_PASSWORD}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "index_patterns": ["mimir-*"],
+        "template": {
+          "settings": {
+            "number_of_shards": 3,
+            "number_of_replicas": 1,
+            "index.lifecycle.name": "mimir-ilm-policy",
+            "index.lifecycle.rollover_alias": "mimir-logs",
+            "index.refresh_interval": "30s",
+            "index.translog.flush_threshold_size": "512mb"
+          },
+          "mappings": {
+            "properties": {
+              "@timestamp": { "type": "date" },
+              "level": { "type": "keyword" },
+              "message": { 
+                "type": "text",
+                "analyzer": "standard",
+                "fields": {
+                  "keyword": {
+                    "type": "keyword",
+                    "ignore_above": 8191
+                  }
+                }
+              },
+              "component": { "type": "keyword" },
+              "pod_name": { "type": "keyword" },
+              "namespace": { "type": "keyword" },
+              "trace_id": { "type": "keyword" },
+              "user_id": { "type": "keyword" },
+              "request_id": { "type": "keyword" },
+              "http": {
+                "properties": {
+                  "method": { "type": "keyword" },
+                  "status_code": { "type": "integer" },
+                  "url": { "type": "keyword" },
+                  "user_agent": { "type": "text" },
+                  "response_time_ms": { "type": "integer" }
+                }
+              },
+              "error": {
+                "properties": {
+                  "type": { "type": "keyword" },
+                  "message": { "type": "text" },
+                  "stack_trace": { "type": "text" }
+                }
+              }
+            }
+          }
+        }
+      }'
+    
+    curl -k -X PUT "${ELASTICSEARCH_URL}/_index_template/kubernetes-logs" \
+      -u "elastic:${ELASTIC_PASSWORD}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "index_patterns": ["kubernetes-*"],
+        "template": {
+          "settings": {
+            "number_of_shards": 2,
+            "number_of_replicas": 1,
+            "index.lifecycle.name": "kubernetes-ilm-policy",
+            "index.refresh_interval": "60s"
+          }
+        }
+      }'
+    
+    echo "ILM policies and templates created successfully!"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: elasticsearch-setup
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/component: setup
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: elasticsearch
+        app.kubernetes.io/component: setup
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: setup
+        image: curlimages/curl:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: password
+        command:
+        - /bin/sh
+        - /scripts/setup-ilm.sh
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: scripts
+        configMap:
+          name: elasticsearch-ilm-policies
+          defaultMode: 0755
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: log-rotation-config
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: logging
+    app.kubernetes.io/component: maintenance
+data:
+  cleanup-old-indices.sh: |
+    #!/bin/bash
+    # Script to clean up old indices beyond ILM policies
+    
+    ELASTICSEARCH_URL="https://elasticsearch:9200"
+    ELASTIC_PASSWORD="${ELASTIC_PASSWORD}"
+    
+    # Delete indices older than 60 days (backup for ILM)
+    CUTOFF_DATE=$(date -d '60 days ago' '+%Y.%m.%d')
+    
+    echo "Cleaning up indices older than ${CUTOFF_DATE}..."
+    
+    # Get all indices
+    INDICES=$(curl -s -k -u "elastic:${ELASTIC_PASSWORD}" \
+      "${ELASTICSEARCH_URL}/_cat/indices?h=index&s=index" | \
+      grep -E "(mimir|kubernetes)-.*-[0-9]{4}\.[0-9]{2}\.[0-9]{2}")
+    
+    for index in $INDICES; do
+      # Extract date from index name
+      INDEX_DATE=$(echo $index | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' | tail -1)
+      
+      if [ "$INDEX_DATE" \< "$CUTOFF_DATE" ]; then
+        echo "Deleting old index: $index (date: $INDEX_DATE)"
+        curl -s -k -X DELETE -u "elastic:${ELASTIC_PASSWORD}" \
+          "${ELASTICSEARCH_URL}/${index}"
+      fi
+    done
+    
+    echo "Cleanup completed!"
+  
+  optimize-indices.sh: |
+    #!/bin/bash
+    # Script to optimize old indices
+    
+    ELASTICSEARCH_URL="https://elasticsearch:9200"
+    ELASTIC_PASSWORD="${ELASTIC_PASSWORD}"
+    
+    # Force merge indices older than 7 days
+    CUTOFF_DATE=$(date -d '7 days ago' '+%Y.%m.%d')
+    
+    echo "Optimizing indices older than ${CUTOFF_DATE}..."
+    
+    INDICES=$(curl -s -k -u "elastic:${ELASTIC_PASSWORD}" \
+      "${ELASTICSEARCH_URL}/_cat/indices?h=index&s=index" | \
+      grep -E "(mimir|kubernetes)-.*-[0-9]{4}\.[0-9]{2}\.[0-9]{2}")
+    
+    for index in $INDICES; do
+      INDEX_DATE=$(echo $index | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' | tail -1)
+      
+      if [ "$INDEX_DATE" \< "$CUTOFF_DATE" ]; then
+        echo "Force merging index: $index"
+        curl -s -k -X POST -u "elastic:${ELASTIC_PASSWORD}" \
+          "${ELASTICSEARCH_URL}/${index}/_forcemerge?max_num_segments=1"
+      fi
+    done
+    
+    echo "Optimization completed!"
+  
+  backup-indices.sh: |
+    #!/bin/bash
+    # Script to backup important indices to S3
+    
+    ELASTICSEARCH_URL="https://elasticsearch:9200"
+    ELASTIC_PASSWORD="${ELASTIC_PASSWORD}"
+    S3_BUCKET="${S3_BACKUP_BUCKET:-mimir-log-backups}"
+    
+    echo "Starting index backup to S3..."
+    
+    # Create snapshot repository if not exists
+    curl -k -X PUT -u "elastic:${ELASTIC_PASSWORD}" \
+      "${ELASTICSEARCH_URL}/_snapshot/s3_repository" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "type": "s3",
+        "settings": {
+          "bucket": "'$S3_BUCKET'",
+          "region": "us-east-1",
+          "base_path": "elasticsearch-snapshots"
+        }
+      }'
+    
+    # Create snapshot with timestamp
+    SNAPSHOT_NAME="mimir-logs-$(date +%Y%m%d-%H%M%S)"
+    
+    curl -k -X PUT -u "elastic:${ELASTIC_PASSWORD}" \
+      "${ELASTICSEARCH_URL}/_snapshot/s3_repository/${SNAPSHOT_NAME}" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "indices": "mimir-*",
+        "ignore_unavailable": true,
+        "include_global_state": false,
+        "metadata": {
+          "description": "Automated backup of Mimir logs",
+          "created_by": "kubernetes-cronjob"
+        }
+      }'
+    
+    echo "Snapshot ${SNAPSHOT_NAME} initiated!"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: log-cleanup
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: logging
+    app.kubernetes.io/component: maintenance
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: logging
+            app.kubernetes.io/component: maintenance
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: cleanup
+            image: curlimages/curl:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
+            command:
+            - /bin/sh
+            - /scripts/cleanup-old-indices.sh
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          volumes:
+          - name: scripts
+            configMap:
+              name: log-rotation-config
+              defaultMode: 0755
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: log-optimization
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: logging
+    app.kubernetes.io/component: maintenance
+spec:
+  schedule: "0 4 * * 0"  # Weekly on Sunday at 4 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: logging
+            app.kubernetes.io/component: maintenance
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: optimize
+            image: curlimages/curl:latest
+            imagePullPolicy: IfNotPresent
+            env:
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
+            command:
+            - /bin/sh
+            - /scripts/optimize-indices.sh
+            volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          volumes:
+          - name: scripts
+            configMap:
+              name: log-rotation-config
+              defaultMode: 0755

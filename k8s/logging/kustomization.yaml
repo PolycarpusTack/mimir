@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mimir-logging
+
+resources:
+  - elasticsearch-deployment.yaml
+  - kibana-deployment.yaml
+  - logstash-deployment.yaml
+  - filebeat-daemonset.yaml
+  - log-management.yaml
+
+configMapGenerator:
+  - name: logging-version
+    literals:
+      - VERSION=1.0.0
+      - ELASTICSEARCH_VERSION=8.10.2
+      - KIBANA_VERSION=8.10.2
+      - LOGSTASH_VERSION=8.10.2
+      - FILEBEAT_VERSION=8.10.2
+
+commonLabels:
+  app.kubernetes.io/part-of: mimir
+  app.kubernetes.io/managed-by: kustomize
+
+# Patches for production
+patches:
+  - target:
+      kind: StatefulSet
+      name: elasticsearch
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 500Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 8Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 6Gi
+  
+  - target:
+      kind: Deployment
+      name: kibana
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3

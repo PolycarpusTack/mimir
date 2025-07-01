@@ -1,0 +1,365 @@
+# Filebeat DaemonSet for Log Collection
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: filebeat
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: filebeat
+    app.kubernetes.io/component: logging
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: filebeat
+  labels:
+    app.kubernetes.io/name: filebeat
+    app.kubernetes.io/component: logging
+rules:
+- apiGroups: [""]
+  resources:
+  - namespaces
+  - pods
+  - nodes
+  verbs:
+  - get
+  - watch
+  - list
+- apiGroups: ["apps"]
+  resources:
+  - replicasets
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: filebeat
+  labels:
+    app.kubernetes.io/name: filebeat
+    app.kubernetes.io/component: logging
+subjects:
+- kind: ServiceAccount
+  name: filebeat
+  namespace: mimir-logging
+roleRef:
+  kind: ClusterRole
+  name: filebeat
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: filebeat
+    app.kubernetes.io/component: logging
+data:
+  filebeat.yml: |
+    filebeat.config:
+      inputs:
+        path: ${path.config}/inputs.d/*.yml
+        reload.enabled: false
+      modules:
+        path: ${path.config}/modules.d/*.yml
+        reload.enabled: false
+    
+    filebeat.autodiscover:
+      providers:
+        - type: kubernetes
+          node: ${NODE_NAME}
+          hints.enabled: true
+          hints.default_config:
+            type: container
+            paths:
+              - /var/log/containers/*${data.kubernetes.container.id}.log
+          
+          # Specific configuration for Mimir components
+          templates:
+            - condition:
+                contains:
+                  kubernetes.labels.app_kubernetes_io_part-of: mimir
+              config:
+                - type: container
+                  paths:
+                    - /var/log/containers/*${data.kubernetes.container.id}.log
+                  fields:
+                    app: mimir
+                    component: ${data.kubernetes.labels.app_kubernetes_io_component}
+                    environment: ${data.kubernetes.labels.environment:production}
+                  fields_under_root: false
+                  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+                  multiline.negate: true
+                  multiline.match: after
+                  json.keys_under_root: true
+                  json.add_error_key: true
+                  close_inactive: 5m
+                  scan_frequency: 10s
+            
+            # PostgreSQL logs
+            - condition:
+                contains:
+                  kubernetes.labels.app_kubernetes_io_name: postgres
+              config:
+                - type: container
+                  paths:
+                    - /var/log/containers/*${data.kubernetes.container.id}.log
+                  fields:
+                    app: postgres
+                    logtype: database
+                  multiline.pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}'
+                  multiline.negate: true
+                  multiline.match: after
+                  processors:
+                    - add_kubernetes_metadata:
+                        host: ${NODE_NAME}
+                        matchers:
+                        - logs_path:
+                            logs_path: "/var/log/containers/"
+            
+            # Redis logs
+            - condition:
+                contains:
+                  kubernetes.labels.app_kubernetes_io_name: redis
+              config:
+                - type: container
+                  paths:
+                    - /var/log/containers/*${data.kubernetes.container.id}.log
+                  fields:
+                    app: redis
+                    logtype: cache
+                  processors:
+                    - add_kubernetes_metadata:
+                        host: ${NODE_NAME}
+                        matchers:
+                        - logs_path:
+                            logs_path: "/var/log/containers/"
+    
+    # Kubernetes metadata enrichment
+    processors:
+      - add_kubernetes_metadata:
+          host: ${NODE_NAME}
+          matchers:
+          - logs_path:
+              logs_path: "/var/log/containers/"
+      
+      - add_host_metadata:
+          when.not.contains.tags: forwarded
+      
+      - add_docker_metadata: ~
+      
+      - drop_event:
+          when:
+            or:
+              - contains:
+                  kubernetes.container.name: "filebeat"
+              - contains:
+                  kubernetes.container.name: "logstash"
+              - contains:
+                  kubernetes.container.name: "elasticsearch"
+              - contains:
+                  kubernetes.container.name: "kibana"
+    
+    # Output configuration
+    output.logstash:
+      hosts: ["logstash:5044"]
+      ssl.enabled: false
+      compression_level: 3
+      bulk_max_size: 1024
+      template.enabled: false
+      
+      # Load balancing
+      loadbalance: true
+      worker: 2
+      
+      # Backoff settings
+      backoff.init: 1s
+      backoff.max: 60s
+    
+    # Monitoring
+    monitoring.enabled: true
+    monitoring.elasticsearch:
+      hosts: ["https://elasticsearch:9200"]
+      username: "elastic"
+      password: "${ELASTIC_PASSWORD}"
+      ssl.verification_mode: none
+    
+    # Logging
+    logging.level: info
+    logging.to_files: true
+    logging.files:
+      path: /var/log/filebeat
+      name: filebeat
+      keepfiles: 7
+      permissions: 0644
+    
+    # Performance tuning
+    queue.mem:
+      events: 4096
+      flush.min_events: 512
+      flush.timeout: 1s
+    
+    # HTTP endpoint for health checks
+    http.enabled: true
+    http.host: 0.0.0.0
+    http.port: 5066
+  
+  inputs.d/system.yml: |
+    - type: log
+      enabled: true
+      paths:
+        - /var/log/syslog
+        - /var/log/messages
+        - /var/log/secure
+        - /var/log/auth.log
+      fields:
+        logtype: system
+        environment: production
+      fields_under_root: false
+      exclude_lines: ['^DBG']
+      multiline.pattern: '^\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}'
+      multiline.negate: true
+      multiline.match: after
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: filebeat
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: filebeat
+    app.kubernetes.io/component: logging
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: filebeat
+      app.kubernetes.io/component: logging
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: filebeat
+        app.kubernetes.io/component: logging
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5066"
+        prometheus.io/path: "/stats"
+    spec:
+      serviceAccountName: filebeat
+      terminationGracePeriodSeconds: 30
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:8.10.2
+        imagePullPolicy: IfNotPresent
+        args: [
+          "-c", "/etc/filebeat.yml",
+          "-e",
+        ]
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: ELASTIC_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: password
+        ports:
+        - containerPort: 5066
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+        securityContext:
+          runAsUser: 0
+          privileged: false
+          capabilities:
+            add:
+            - DAC_READ_SEARCH
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: config
+          mountPath: /etc/filebeat.yml
+          readOnly: true
+          subPath: filebeat.yml
+        - name: inputs
+          mountPath: /usr/share/filebeat/inputs.d
+          readOnly: true
+        - name: data
+          mountPath: /usr/share/filebeat/data
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: varlogcontainers
+          mountPath: /var/log/containers
+          readOnly: true
+        - name: varlogpods
+          mountPath: /var/log/pods
+          readOnly: true
+        - name: varlogs
+          mountPath: /var/log
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          defaultMode: 0640
+          name: filebeat-config
+      - name: inputs
+        configMap:
+          defaultMode: 0640
+          name: filebeat-config
+          items:
+          - key: inputs.d/system.yml
+            path: system.yml
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: varlogcontainers
+        hostPath:
+          path: /var/log/containers
+      - name: varlogpods
+        hostPath:
+          path: /var/log/pods
+      - name: varlogs
+        hostPath:
+          path: /var/log
+      - name: data
+        hostPath:
+          path: /var/lib/filebeat-data
+          type: DirectoryOrCreate

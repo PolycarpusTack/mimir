@@ -1,0 +1,149 @@
+# Mimir Celery Worker - Background Task Processing Dockerfile
+# Optimized for CPU-intensive NLP and scraping tasks
+
+ARG PYTHON_VERSION=3.11.7
+ARG ALPINE_VERSION=3.19
+
+# ================================
+# Stage 1: Build Dependencies
+# ================================
+FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+# Install build dependencies including ML/NLP requirements
+RUN apk add --no-cache \
+    gcc \
+    g++ \
+    musl-dev \
+    postgresql-dev \
+    libffi-dev \
+    openssl-dev \
+    cargo \
+    rust \
+    make \
+    linux-headers \
+    # For ML/NLP packages
+    gfortran \
+    openblas-dev \
+    lapack-dev
+
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt requirements_api.txt ./
+RUN pip install --no-cache-dir --user --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --user -r requirements.txt && \
+    pip install --no-cache-dir --user -r requirements_api.txt
+
+# ================================
+# Stage 2: NLP Models Download
+# ================================
+FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS nlp-models
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+# Install minimal system dependencies for model downloads
+RUN apk add --no-cache gcc musl-dev
+
+# Download spaCy language models
+RUN python -m spacy download en_core_web_sm && \
+    python -m spacy download nl_core_news_sm && \
+    python -m spacy download de_core_news_sm && \
+    python -m spacy download fr_core_news_sm
+
+# Download NLTK data
+RUN python -c "import nltk; nltk.download('punkt', download_dir='/nltk_data'); nltk.download('stopwords', download_dir='/nltk_data')"
+
+# Download sentence transformers models (for semantic search)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+# ================================
+# Stage 3: Production Runtime
+# ================================
+FROM python:${PYTHON_VERSION}-alpine${ALPINE_VERSION} AS production
+
+# Security: Create non-root user
+RUN addgroup -g 1001 -S mimir && \
+    adduser -S -D -u 1001 -G mimir mimir
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    postgresql-client \
+    libpq \
+    libffi \
+    openssl \
+    ca-certificates \
+    curl \
+    dumb-init \
+    # For ML/NLP runtime
+    openblas \
+    lapack
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/mimir/.local
+
+# Copy NLP models and data
+COPY --from=nlp-models /root/.local/lib/python3.11/site-packages/en_core_web_sm /home/mimir/.local/lib/python3.11/site-packages/en_core_web_sm
+COPY --from=nlp-models /root/.local/lib/python3.11/site-packages/nl_core_news_sm /home/mimir/.local/lib/python3.11/site-packages/nl_core_news_sm
+COPY --from=nlp-models /root/.local/lib/python3.11/site-packages/de_core_news_sm /home/mimir/.local/lib/python3.11/site-packages/de_core_news_sm
+COPY --from=nlp-models /root/.local/lib/python3.11/site-packages/fr_core_news_sm /home/mimir/.local/lib/python3.11/site-packages/fr_core_news_sm
+COPY --from=nlp-models /nltk_data /home/mimir/nltk_data
+COPY --from=nlp-models /root/.cache /home/mimir/.cache
+
+# Set up environment
+ENV PATH=/home/mimir/.local/bin:$PATH \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    NLTK_DATA=/home/mimir/nltk_data \
+    ENVIRONMENT=production \
+    PYTHONHASHSEED=random \
+    # Celery settings
+    CELERY_BROKER_URL=redis://redis:6379/0 \
+    CELERY_RESULT_BACKEND=redis://redis:6379/0 \
+    # ML/NLP optimizations
+    OMP_NUM_THREADS=2 \
+    OPENBLAS_NUM_THREADS=2
+
+# Create application directories
+WORKDIR /app
+RUN mkdir -p /app/logs /app/data && \
+    chown -R mimir:mimir /app
+
+# Copy application code (excluding unnecessary files)
+COPY --chown=mimir:mimir . .
+
+# Remove unnecessary files for production
+RUN rm -rf \
+    tests/ \
+    docs/ \
+    *.md \
+    .git* \
+    __pycache__/ \
+    *.pyc \
+    *.pyo \
+    *.pyd \
+    .Python \
+    .pytest_cache/ \
+    .coverage \
+    static/ \
+    templates/
+
+# Set proper permissions
+RUN find /app -type f -name "*.py" -exec chmod 644 {} \; && \
+    find /app -type d -exec chmod 755 {} \; && \
+    chown -R mimir:mimir /home/mimir/.cache
+
+# Switch to non-root user
+USER mimir
+
+# Health check for worker service
+HEALTHCHECK --interval=60s --timeout=30s --start-period=120s --retries=3 \
+    CMD celery -A celery_app inspect ping -d celery@$HOSTNAME || exit 1
+
+# Use dumb-init for proper signal handling
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start Celery worker
+CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info", "--concurrency=4", "--max-tasks-per-child=1000"]

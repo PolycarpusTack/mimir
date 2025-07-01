@@ -1,0 +1,252 @@
+# Mimir Testing Environment - Docker Compose Override
+# Specialized setup for running tests and CI/CD
+
+version: '3.8'
+
+services:
+  # ===================================
+  # Test Database (Isolated)
+  # ===================================
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: mimir_postgres_test
+    environment:
+      POSTGRES_DB: mimir_test
+      POSTGRES_USER: mimir_test
+      POSTGRES_PASSWORD: mimir_test_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.utf8"
+    volumes:
+      - ./scripts/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mimir_test -d mimir_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - mimir_test_network
+
+  # Test Redis (Isolated)
+  redis-test:
+    image: redis:7-alpine
+    container_name: mimir_redis_test
+    command: redis-server --requirepass test_pass
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "test_pass", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mimir_test_network
+
+  # ===================================
+  # Test Runner Service
+  # ===================================
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: mimir_test_runner
+    environment:
+      - ENVIRONMENT=testing
+      - DATABASE_URL=postgresql://mimir_test:mimir_test_pass@postgres-test:5432/mimir_test
+      - REDIS_URL=redis://:test_pass@redis-test:6379/0
+      - CELERY_BROKER_URL=redis://:test_pass@redis-test:6379/0
+      - CELERY_RESULT_BACKEND=redis://:test_pass@redis-test:6379/0
+      - LOG_LEVEL=DEBUG
+      - PYTEST_ARGS=${PYTEST_ARGS:--v --tb=short}
+      - COVERAGE_REPORT=${COVERAGE_REPORT:-true}
+    volumes:
+      - .:/app:ro
+      - ./test-results:/app/test-results
+      - ./coverage-reports:/app/coverage-reports
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Setting up test environment...' &&
+        python -m pytest tests/ $$PYTEST_ARGS --junitxml=/app/test-results/junit.xml &&
+        if [ '$$COVERAGE_REPORT' = 'true' ]; then
+          echo 'Generating coverage report...' &&
+          python -m pytest tests/ --cov=. --cov-report=html:/app/coverage-reports/html --cov-report=xml:/app/coverage-reports/coverage.xml --cov-report=term
+        fi
+      "
+    networks:
+      - mimir_test_network
+
+  # ===================================
+  # API Integration Tests
+  # ===================================
+  api-integration-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mimir_api_integration_test
+    environment:
+      - ENVIRONMENT=testing
+      - DATABASE_URL=postgresql://mimir_test:mimir_test_pass@postgres-test:5432/mimir_test
+      - REDIS_URL=redis://:test_pass@redis-test:6379/0
+      - LOG_LEVEL=DEBUG
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Starting API for integration tests...' &&
+        uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+      "
+    networks:
+      - mimir_test_network
+    profiles:
+      - integration-tests
+
+  # ===================================
+  # Load Testing Service
+  # ===================================
+  load-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mimir_load_test
+    environment:
+      - ENVIRONMENT=testing
+      - TARGET_HOST=${TARGET_HOST:-http://api-integration-test:8000}
+      - LOAD_TEST_USERS=${LOAD_TEST_USERS:-10}
+      - LOAD_TEST_SPAWN_RATE=${LOAD_TEST_SPAWN_RATE:-2}
+      - LOAD_TEST_TIME=${LOAD_TEST_TIME:-60s}
+    volumes:
+      - ./tests/locustfile.py:/app/locustfile.py:ro
+      - ./test-results:/app/test-results
+    command: >
+      sh -c "
+        echo 'Running load tests...' &&
+        locust -f /app/locustfile.py --host=$$TARGET_HOST --users=$$LOAD_TEST_USERS --spawn-rate=$$LOAD_TEST_SPAWN_RATE --run-time=$$LOAD_TEST_TIME --html=/app/test-results/load-test-report.html --csv=/app/test-results/load-test
+      "
+    depends_on:
+      - api-integration-test
+    networks:
+      - mimir_test_network
+    profiles:
+      - load-tests
+
+  # ===================================
+  # Security Testing
+  # ===================================
+  security-test:
+    image: owasp/zap2docker-stable
+    container_name: mimir_security_test
+    volumes:
+      - ./security-reports:/zap/wrk
+    command: >
+      sh -c "
+        echo 'Running OWASP ZAP security scan...' &&
+        zap-baseline.py -t http://api-integration-test:8000 -J /zap/wrk/security-report.json -r /zap/wrk/security-report.html
+      "
+    depends_on:
+      - api-integration-test
+    networks:
+      - mimir_test_network
+    profiles:
+      - security-tests
+
+  # ===================================
+  # Database Migration Testing
+  # ===================================
+  migration-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mimir_migration_test
+    environment:
+      - ENVIRONMENT=testing
+      - DATABASE_URL=postgresql://mimir_test:mimir_test_pass@postgres-test:5432/mimir_test
+    volumes:
+      - ./migrations:/app/migrations:ro
+      - ./test-results:/app/test-results
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Testing database migrations...' &&
+        alembic upgrade head &&
+        alembic downgrade base &&
+        alembic upgrade head &&
+        echo 'Migration tests completed successfully' > /app/test-results/migration-test.log
+      "
+    networks:
+      - mimir_test_network
+    profiles:
+      - migration-tests
+
+  # ===================================
+  # End-to-End Testing with Selenium
+  # ===================================
+  selenium-hub:
+    image: selenium/hub:latest
+    container_name: mimir_selenium_hub
+    ports:
+      - "4444:4444"
+    networks:
+      - mimir_test_network
+    profiles:
+      - e2e-tests
+
+  selenium-chrome:
+    image: selenium/node-chrome:latest
+    container_name: mimir_selenium_chrome
+    environment:
+      - HUB_HOST=selenium-hub
+      - HUB_PORT=4444
+    depends_on:
+      - selenium-hub
+    networks:
+      - mimir_test_network
+    profiles:
+      - e2e-tests
+
+  e2e-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mimir_e2e_test
+    environment:
+      - ENVIRONMENT=testing
+      - SELENIUM_HUB_URL=http://selenium-hub:4444/wd/hub
+      - BASE_URL=http://mimir-web:5000
+      - API_URL=http://api-integration-test:8000
+    volumes:
+      - ./tests/e2e:/app/tests/e2e:ro
+      - ./test-results:/app/test-results
+    command: >
+      sh -c "
+        echo 'Running end-to-end tests...' &&
+        python -m pytest tests/e2e/ -v --tb=short --junitxml=/app/test-results/e2e-junit.xml
+      "
+    depends_on:
+      - selenium-hub
+      - selenium-chrome
+      - api-integration-test
+    networks:
+      - mimir_test_network
+    profiles:
+      - e2e-tests
+
+volumes:
+  postgres_test_data:
+    driver: local
+  redis_test_data:
+    driver: local
+
+networks:
+  mimir_test_network:
+    driver: bridge
+    name: mimir_test_network

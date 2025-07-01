@@ -1,0 +1,214 @@
+{
+  "settings": {
+    "article_limit_per_run": 100,
+    "article_limit_per_source": 10,
+    "enable_smart_extraction": true,
+    "respect_robots_txt": true,
+    "user_agent": "Mimir Broadcast Intelligence Bot (+https://mimir.ai/bot)"
+  },
+  "sources": [
+    {
+      "category": "broadcasters",
+      "name": "NBCUniversal Press",
+      "url": "https://www.nbcuniversal.com/press-releases",
+      "type": "html",
+      "enabled": true,
+      "selectors": {
+        "article_list": "div.press-release-item",
+        "article_link": "a.press-release-link",
+        "title": "h2.press-release-title",
+        "date": "span.press-release-date",
+        "content": "div.press-release-content"
+      },
+      "rss_alternative": "https://www.nbcuniversal.com/feeds/press-releases/rss.xml"
+    },
+    {
+      "category": "broadcasters",
+      "name": "Disney Press",
+      "url": "https://press.disneyplus.com/",
+      "type": "rss",
+      "rss_url": "https://press.disneyplus.com/feeds/default/rss",
+      "enabled": true
+    },
+    {
+      "category": "broadcasters",
+      "name": "Warner Bros Discovery",
+      "url": "https://press.wbd.com/us/media-hub",
+      "type": "html",
+      "enabled": true,
+      "selectors": {
+        "article_list": "div.media-item",
+        "article_link": "a",
+        "title": "h3",
+        "date": "time",
+        "content": "div.content"
+      }
+    },
+    {
+      "category": "broadcasters",
+      "name": "BBC Media Centre",
+      "url": "https://www.bbc.com/mediacentre/",
+      "type": "rss",
+      "rss_url": "https://www.bbc.com/mediacentre/rss/mediareleases",
+      "enabled": true
+    },
+    {
+      "category": "standards",
+      "name": "ATSC News",
+      "url": "https://www.atsc.org/news/",
+      "type": "html",
+      "enabled": true,
+      "selectors": {
+        "article_list": "article.post",
+        "article_link": "h2 a",
+        "title": "h2",
+        "date": "time",
+        "content": "div.entry-content"
+      }
+    },
+    {
+      "category": "standards",
+      "name": "DVB News",
+      "url": "https://dvb.org/news/",
+      "type": "rss",
+      "rss_url": "https://dvb.org/feed/",
+      "enabled": true
+    },
+    {
+      "category": "standards",
+      "name": "SMPTE News",
+      "url": "https://www.smpte.org/news-publications",
+      "type": "html",
+      "enabled": true,
+      "note": "Check for RSS feed"
+    },
+    {
+      "category": "trade_publications",
+      "name": "Broadcasting & Cable",
+      "url": "https://www.nexttv.com/news",
+      "type": "html",
+      "enabled": true,
+      "selectors": {
+        "article_list": "div.article-item",
+        "article_link": "h3 a",
+        "title": "h3",
+        "date": "time",
+        "content": "div.article-content"
+      }
+    },
+    {
+      "category": "trade_publications",
+      "name": "TV Technology",
+      "url": "https://www.tvtechnology.com/",
+      "type": "rss",
+      "rss_url": "https://www.tvtechnology.com/rss",
+      "enabled": true
+    },
+    {
+      "category": "trade_publications",
+      "name": "Digital TV Europe",
+      "url": "https://www.digitaltveurope.com/",
+      "type": "rss",
+      "rss_url": "https://www.digitaltveurope.com/feed/",
+      "enabled": true
+    },
+    {
+      "category": "trade_publications",
+      "name": "Variety Broadcasting",
+      "url": "https://variety.com/v/tv/",
+      "type": "rss",
+      "rss_url": "https://variety.com/feed/",
+      "enabled": true,
+      "filters": {
+        "categories": ["TV", "Streaming", "Digital"]
+      }
+    },
+    {
+      "category": "trade_publications",
+      "name": "Deadline TV",
+      "url": "https://deadline.com/tv/",
+      "type": "rss",
+      "rss_url": "https://deadline.com/feed/",
+      "enabled": true
+    },
+    {
+      "category": "trade_publications",
+      "name": "C21Media",
+      "url": "https://www.c21media.net/",
+      "type": "rss",
+      "rss_url": "https://www.c21media.net/feed/",
+      "enabled": true
+    },
+    {
+      "category": "trade_publications",
+      "name": "TBI Vision",
+      "url": "https://tbivision.com/",
+      "type": "rss", 
+      "rss_url": "https://tbivision.com/feed/",
+      "enabled": true
+    },
+    {
+      "category": "technology_vendors",
+      "name": "Harmonic Press",
+      "url": "https://www.harmonicinc.com/company/press-releases/",
+      "type": "html",
+      "enabled": true,
+      "selectors": {
+        "article_list": "div.press-release",
+        "article_link": "a",
+        "title": "h3",
+        "date": "span.date",
+        "content": "div.content"
+      }
+    },
+    {
+      "category": "technology_vendors",
+      "name": "MediaKind News",
+      "url": "https://www.mediakind.com/news/",
+      "type": "html",
+      "enabled": true,
+      "note": "Check for RSS or API"
+    },
+    {
+      "category": "technology_vendors",
+      "name": "Grass Valley News",
+      "url": "https://www.grassvalley.com/news/",
+      "type": "html",
+      "enabled": true,
+      "selectors": {
+        "article_list": "article.news-item",
+        "article_link": "a",
+        "title": "h2",
+        "date": "time",
+        "content": "div.content"
+      }
+    }
+  ],
+  "filters": {
+    "keywords": {
+      "must_have_one": [
+        "streaming", "OTT", "broadcast", "television", "TV",
+        "ATSC 3.0", "NextGen TV", "DVB", "IPTV", "5G broadcast",
+        "video", "media", "content delivery", "CDN", "playout"
+      ],
+      "exclude": [
+        "sports scores", "celebrity gossip", "reality TV drama",
+        "fashion", "lifestyle", "cooking shows"
+      ],
+      "boost": [
+        "technology", "infrastructure", "platform", "standard",
+        "merger", "acquisition", "partnership", "launch"
+      ]
+    },
+    "announcement_types": [
+      "technology_partnership",
+      "platform_launch", 
+      "standard_adoption",
+      "merger_acquisition",
+      "executive_appointment",
+      "financial_results",
+      "product_release",
+      "industry_report"
+    ]
+  }
+}

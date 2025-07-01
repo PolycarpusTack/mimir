@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mimir - Netflix Style News Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #141414;
+            color: #fff;
+            overflow-x: hidden;
+        }
+        
+        /* Header */
+        header {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 10%, rgba(0,0,0,0));
+            padding: 1rem 4%;
+            z-index: 1000;
+            transition: background 0.3s;
+        }
+        
+        header.scrolled {
+            background: #141414;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #e50914;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        nav {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        
+        nav a {
+            color: #e5e5e5;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+        
+        nav a:hover {
+            color: #b3b3b3;
+        }
+        
+        nav a.active {
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        
+        .search-icon, .settings-icon {
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: transform 0.2s;
+        }
+        
+        .search-icon:hover, .settings-icon:hover {
+            transform: scale(1.2);
+        }
+        
+        /* Hero Section */
+        .hero {
+            height: 70vh;
+            background: linear-gradient(to top, #141414 0%, transparent 50%), 
+                        linear-gradient(to right, rgba(20,20,20,0.8) 40%, transparent 70%),
+                        url('data:image/svg+xml,%3Csvg width="1200" height="800" xmlns="http://www.w3.org/2000/svg"%3E%3Cdefs%3E%3Cpattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect width="100%25" height="100%25" fill="%23667eea"/%3E%3Crect width="100%25" height="100%25" fill="url(%23grid)"/%3E%3C/svg%3E');
+            background-size: cover;
+            background-position: center;
+            display: flex;
+            align-items: center;
+            padding: 0 4%;
+            margin-top: 4rem;
+        }
+        
+        .hero-content {
+            max-width: 600px;
+        }
+        
+        .hero-title {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+        
+        .hero-meta {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            color: #e5e5e5;
+        }
+        
+        .hero-badge {
+            background: #e50914;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .hero-description {
+            font-size: 1.2rem;
+            line-height: 1.5;
+            margin-bottom: 2rem;
+            color: #e5e5e5;
+        }
+        
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .btn {
+            padding: 0.8rem 2rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: #e50914;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #f40612;
+        }
+        
+        .btn-secondary {
+            background: rgba(109, 109, 110, 0.7);
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(109, 109, 110, 0.4);
+        }
+        
+        /* Swimlanes */
+        .swimlanes-container {
+            padding: 0 4%;
+            margin-top: -5rem;
+            position: relative;
+            z-index: 100;
+        }
+        
+        .swimlane {
+            margin-bottom: 3rem;
+        }
+        
+        .swimlane-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .swimlane-title {
+            font-size: 1.4rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .swimlane-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .swimlane-edit {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.3s;
+        }
+        
+        .swimlane-edit:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        /* Article Cards */
+        .articles-row {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            padding: 0.5rem 0;
+            scrollbar-width: none;
+        }
+        
+        .articles-row::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .article-card {
+            flex: 0 0 300px;
+            background: #181818;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .article-card:hover {
+            transform: scale(1.05);
+            z-index: 10;
+        }
+        
+        .article-card:hover .article-info {
+            opacity: 1;
+        }
+        
+        .article-thumbnail {
+            width: 100%;
+            height: 170px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .article-source {
+            position: absolute;
+            top: 0.5rem;
+            left: 0.5rem;
+            background: rgba(0,0,0,0.8);
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .article-time {
+            position: absolute;
+            bottom: 0.5rem;
+            right: 0.5rem;
+            background: rgba(0,0,0,0.8);
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+        
+        .article-content {
+            padding: 1rem;
+        }
+        
+        .article-title {
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .article-tags {
+            display: flex;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+        }
+        
+        .article-tag {
+            background: #e50914;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+        
+        .article-info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.9);
+            padding: 1rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        /* Scroll buttons */
+        .scroll-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.7);
+            border: none;
+            color: white;
+            width: 50px;
+            height: 100px;
+            cursor: pointer;
+            font-size: 2rem;
+            transition: all 0.3s;
+            z-index: 100;
+        }
+        
+        .scroll-button:hover {
+            background: rgba(0,0,0,0.9);
+        }
+        
+        .scroll-left {
+            left: 0;
+        }
+        
+        .scroll-right {
+            right: 0;
+        }
+        
+        /* Settings Modal */
+        .settings-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            overflow-y: auto;
+        }
+        
+        .settings-content {
+            background: #1a1a1a;
+            margin: 5% auto;
+            padding: 2rem;
+            max-width: 800px;
+            border-radius: 8px;
+            position: relative;
+        }
+        
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .settings-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+        }
+        
+        .settings-section {
+            margin-bottom: 2rem;
+        }
+        
+        .settings-section-title {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: #e5e5e5;
+        }
+        
+        .source-item {
+            background: #2a2a2a;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .source-info {
+            flex: 1;
+        }
+        
+        .source-name {
+            font-weight: 500;
+            margin-bottom: 0.3rem;
+        }
+        
+        .source-url {
+            font-size: 0.85rem;
+            color: #999;
+        }
+        
+        .source-toggle {
+            background: #4CAF50;
+            border: none;
+            width: 50px;
+            height: 26px;
+            border-radius: 13px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .source-toggle.off {
+            background: #666;
+        }
+        
+        .source-toggle::after {
+            content: '';
+            position: absolute;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 26px;
+            transition: left 0.3s;
+        }
+        
+        .source-toggle.off::after {
+            left: 2px;
+        }
+        
+        .add-source-form {
+            background: #2a2a2a;
+            padding: 1.5rem;
+            border-radius: 6px;
+            margin-top: 1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: #e5e5e5;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 0.7rem;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: white;
+            font-size: 0.95rem;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #e50914;
+        }
+        
+        .source-type-buttons {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .type-btn {
+            padding: 0.5rem 1rem;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e5e5e5;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .type-btn.active {
+            background: #e50914;
+            border-color: #e50914;
+            color: white;
+        }
+        
+        /* Keyword/Swimlane Management */
+        .swimlane-item {
+            background: #2a2a2a;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: move;
+        }
+        
+        .swimlane-item.dragging {
+            opacity: 0.5;
+        }
+        
+        .keyword-badge {
+            background: #e50914;
+            padding: 0.3rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+        }
+        
+        /* Add floating action button */
+        .fab {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            background: #e50914;
+            border-radius: 50%;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .fab:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+        }
+    </style>
+</head>
+<body>
+    <header id="header">
+        <div class="header-content">
+            <a href="#" class="logo">
+                <span>📰</span>
+                <span>MIMIR</span>
+            </a>
+            
+            <nav>
+                <a href="#" class="active">Home</a>
+                <a href="#">My List</a>
+                <a href="#">Trending</a>
+                <a href="#">Categories</a>
+                <a href="#">Analytics</a>
+            </nav>
+            
+            <div class="header-right">
+                <span class="search-icon">🔍</span>
+                <span class="settings-icon" onclick="openSettings()">⚙️</span>
+                <img src="data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23E50914'/%3E%3C/svg%3E" 
+                     style="width: 32px; height: 32px; border-radius: 4px; cursor: pointer;">
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1 class="hero-title">Apple's Vision Pro 3 Revolutionary Neural Interface</h1>
+            <div class="hero-meta">
+                <span class="hero-badge">TRENDING</span>
+                <span>TechCrunch</span>
+                <span>2 hours ago</span>
+            </div>
+            <p class="hero-description">
+                Leaked documents reveal Apple's next Vision Pro will feature non-invasive neural interface technology, 
+                enabling thought-based controls and revolutionizing human-computer interaction.
+            </p>
+            <div class="hero-buttons">
+                <button class="btn btn-primary">
+                    <span>▶</span>
+                    <span>Read Now</span>
+                </button>
+                <button class="btn btn-secondary">
+                    <span>ℹ️</span>
+                    <span>More Info</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Swimlanes Container -->
+    <div class="swimlanes-container">
+        <!-- Latest Articles Swimlane -->
+        <div class="swimlane">
+            <div class="swimlane-header">
+                <h2 class="swimlane-title">
+                    <span>🔥</span>
+                    <span>Latest Articles</span>
+                </h2>
+            </div>
+            <div class="articles-row">
+                <article class="article-card">
+                    <div class="article-thumbnail">
+                        <span>🤖</span>
+                        <span class="article-source">Reuters</span>
+                        <span class="article-time">15 min ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">EU Parliament Passes Landmark AI Act with Stricter Requirements</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">AI Regulation</span>
+                            <span class="article-tag">Europe</span>
+                        </div>
+                    </div>
+                    <div class="article-info">
+                        <p>The European Parliament approved comprehensive AI legislation requiring high-risk AI systems to undergo rigorous testing.</p>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <span>💰</span>
+                        <span class="article-source">Bloomberg</span>
+                        <span class="article-time">1 hour ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">Tesla Stock Surges 12% on Record Q3 Deliveries</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">Tesla</span>
+                            <span class="article-tag">Earnings</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <span>🔐</span>
+                        <span class="article-source">The Verge</span>
+                        <span class="article-time">2 hours ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">Microsoft Announces Major Security Update for AI Assistant</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">Security</span>
+                            <span class="article-tag">Microsoft</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+                        <span>🚀</span>
+                        <span class="article-source">TechCrunch</span>
+                        <span class="article-time">3 hours ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">SpaceX Successfully Launches 50 More Starlink Satellites</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">SpaceX</span>
+                            <span class="article-tag">Starlink</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                        <span>🏥</span>
+                        <span class="article-source">Healthcare IT</span>
+                        <span class="article-time">4 hours ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">FDA Approves AI-Powered Diagnostic Tool for Early Cancer Detection</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">Healthcare</span>
+                            <span class="article-tag">AI</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <!-- AI/ML Keyword Swimlane -->
+        <div class="swimlane">
+            <div class="swimlane-header">
+                <h2 class="swimlane-title">
+                    <span>🤖</span>
+                    <span>AI & Machine Learning</span>
+                </h2>
+                <div class="swimlane-controls">
+                    <button class="swimlane-edit">Edit</button>
+                    <button class="swimlane-edit">Hide</button>
+                </div>
+            </div>
+            <div class="articles-row">
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <span>🧠</span>
+                        <span class="article-source">MIT Tech Review</span>
+                        <span class="article-time">30 min ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">OpenAI Unveils GPT-5 with Breakthrough Reasoning Capabilities</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">OpenAI</span>
+                            <span class="article-tag">GPT-5</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <span>🔬</span>
+                        <span class="article-source">Nature</span>
+                        <span class="article-time">2 hours ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">DeepMind's AlphaFold 3 Solves Protein-Drug Interaction Prediction</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">DeepMind</span>
+                            <span class="article-tag">AlphaFold</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <span>💡</span>
+                        <span class="article-source">VentureBeat</span>
+                        <span class="article-time">5 hours ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">Anthropic Raises $2B at $60B Valuation for AI Safety Research</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">Anthropic</span>
+                            <span class="article-tag">Funding</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <!-- Security Keyword Swimlane -->
+        <div class="swimlane">
+            <div class="swimlane-header">
+                <h2 class="swimlane-title">
+                    <span>🔐</span>
+                    <span>Cybersecurity</span>
+                </h2>
+                <div class="swimlane-controls">
+                    <button class="swimlane-edit">Edit</button>
+                    <button class="swimlane-edit">Hide</button>
+                </div>
+            </div>
+            <div class="articles-row">
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);">
+                        <span>⚠️</span>
+                        <span class="article-source">KrebsOnSecurity</span>
+                        <span class="article-time">1 hour ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">Major Ransomware Group Disrupted in International Operation</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">Ransomware</span>
+                            <span class="article-tag">Cybercrime</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #3f5efb 0%, #fc466b 100%);">
+                        <span>🛡️</span>
+                        <span class="article-source">SecurityWeek</span>
+                        <span class="article-time">3 hours ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">Google Patches Critical Zero-Day Vulnerability in Chrome</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">Zero-Day</span>
+                            <span class="article-tag">Chrome</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <!-- Custom User Swimlane -->
+        <div class="swimlane">
+            <div class="swimlane-header">
+                <h2 class="swimlane-title">
+                    <span>⭐</span>
+                    <span>Your Watchlist</span>
+                </h2>
+                <div class="swimlane-controls">
+                    <button class="swimlane-edit">Edit</button>
+                    <button class="swimlane-edit">Add Keywords</button>
+                </div>
+            </div>
+            <div class="articles-row">
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);">
+                        <span>📱</span>
+                        <span class="article-source">9to5Mac</span>
+                        <span class="article-time">45 min ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">Apple Announces iPhone 16 with Revolutionary Camera System</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">Apple</span>
+                            <span class="article-tag">iPhone</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="article-card">
+                    <div class="article-thumbnail" style="background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);">
+                        <span>☁️</span>
+                        <span class="article-source">AWS Blog</span>
+                        <span class="article-time">2 hours ago</span>
+                    </div>
+                    <div class="article-content">
+                        <h3 class="article-title">AWS Launches New Quantum Computing Service</h3>
+                        <div class="article-tags">
+                            <span class="article-tag">AWS</span>
+                            <span class="article-tag">Quantum</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="settings-modal">
+        <div class="settings-content">
+            <div class="settings-header">
+                <h2 class="settings-title">⚙️ Settings</h2>
+                <button class="close-btn" onclick="closeSettings()">&times;</button>
+            </div>
+
+            <!-- News Sources Section -->
+            <div class="settings-section">
+                <h3 class="settings-section-title">📰 News Sources</h3>
+                
+                <div class="source-item">
+                    <div class="source-info">
+                        <div class="source-name">TechCrunch</div>
+                        <div class="source-url">https://techcrunch.com/feed/</div>
+                    </div>
+                    <button class="source-toggle"></button>
+                </div>
+
+                <div class="source-item">
+                    <div class="source-info">
+                        <div class="source-name">The Verge</div>
+                        <div class="source-url">https://www.theverge.com/rss/index.xml</div>
+                    </div>
+                    <button class="source-toggle"></button>
+                </div>
+
+                <div class="source-item">
+                    <div class="source-info">
+                        <div class="source-name">Reuters Technology</div>
+                        <div class="source-url">https://www.reuters.com/technology/rss</div>
+                    </div>
+                    <button class="source-toggle off"></button>
+                </div>
+
+                <!-- Add New Source -->
+                <div class="add-source-form">
+                    <h4 style="margin-bottom: 1rem;">Add New Source</h4>
+                    <div class="source-type-buttons">
+                        <button class="type-btn active">RSS Feed</button>
+                        <button class="type-btn">Website</button>
+                        <button class="type-btn">API</button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Source Name</label>
+                        <input type="text" class="form-input" placeholder="e.g., Ars Technica">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Feed URL</label>
+                        <input type="text" class="form-input" placeholder="https://example.com/rss">
+                    </div>
+                    
+                    <button class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
+                        Add Source
+                    </button>
+                </div>
+            </div>
+
+            <!-- Swimlanes Management -->
+            <div class="settings-section">
+                <h3 class="settings-section-title">🏊 Manage Swimlanes</h3>
+                
+                <div class="swimlane-item" draggable="true">
+                    <div>
+                        <span class="keyword-badge">AI & Machine Learning</span>
+                        <span style="color: #999; font-size: 0.85rem;">Keywords: AI, ML, GPT, Neural, Deep Learning</span>
+                    </div>
+                    <button class="swimlane-edit">Edit</button>
+                </div>
+
+                <div class="swimlane-item" draggable="true">
+                    <div>
+                        <span class="keyword-badge">Cybersecurity</span>
+                        <span style="color: #999; font-size: 0.85rem;">Keywords: Security, Breach, Vulnerability, Ransomware</span>
+                    </div>
+                    <button class="swimlane-edit">Edit</button>
+                </div>
+
+                <div class="swimlane-item" draggable="true">
+                    <div>
+                        <span class="keyword-badge">Your Watchlist</span>
+                        <span style="color: #999; font-size: 0.85rem;">Keywords: Apple, AWS, Google, Microsoft</span>
+                    </div>
+                    <button class="swimlane-edit">Edit</button>
+                </div>
+
+                <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;">
+                    + Add New Swimlane
+                </button>
+            </div>
+
+            <!-- Email Notifications -->
+            <div class="settings-section">
+                <h3 class="settings-section-title">📧 Email Notifications</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">Email Address</label>
+                    <input type="email" class="form-input" placeholder="your@email.com">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Notification Frequency</label>
+                    <select class="form-input">
+                        <option>Real-time (as articles arrive)</option>
+                        <option>Every hour</option>
+                        <option>Every 4 hours</option>
+                        <option>Daily digest</option>
+                        <option>Weekly summary</option>
+                    </select>
+                </div>
+                
+                <div style="margin-top: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" checked>
+                        <span>Include keyword alerts</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Action Button -->
+    <button class="fab" title="Quick Add Source">+</button>
+
+    <script>
+        // Header scroll effect
+        window.addEventListener('scroll', () => {
+            const header = document.getElementById('header');
+            if (window.scrollY > 50) {
+                header.classList.add('scrolled');
+            } else {
+                header.classList.remove('scrolled');
+            }
+        });
+
+        // Settings modal
+        function openSettings() {
+            document.getElementById('settingsModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSettings() {
+            document.getElementById('settingsModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Toggle switches
+        document.querySelectorAll('.source-toggle').forEach(toggle => {
+            toggle.addEventListener('click', function() {
+                this.classList.toggle('off');
+            });
+        });
+
+        // Type buttons
+        document.querySelectorAll('.type-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Drag and drop for swimlanes
+        let draggedElement = null;
+
+        document.querySelectorAll('.swimlane-item').forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                draggedElement = e.target;
+                e.target.classList.add('dragging');
+            });
+
+            item.addEventListener('dragend', (e) => {
+                e.target.classList.remove('dragging');
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const afterElement = getDragAfterElement(e.currentTarget.parentNode, e.clientY);
+                if (afterElement == null) {
+                    e.currentTarget.parentNode.appendChild(draggedElement);
+                } else {
+                    e.currentTarget.parentNode.insertBefore(draggedElement, afterElement);
+                }
+            });
+        });
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.swimlane-item:not(.dragging)')];
+            
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // Smooth scroll for article rows
+        document.querySelectorAll('.articles-row').forEach(row => {
+            let isDown = false;
+            let startX;
+            let scrollLeft;
+
+            row.addEventListener('mousedown', (e) => {
+                isDown = true;
+                startX = e.pageX - row.offsetLeft;
+                scrollLeft = row.scrollLeft;
+            });
+
+            row.addEventListener('mouseleave', () => {
+                isDown = false;
+            });
+
+            row.addEventListener('mouseup', () => {
+                isDown = false;
+            });
+
+            row.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - row.offsetLeft;
+                const walk = (x - startX) * 2;
+                row.scrollLeft = scrollLeft - walk;
+            });
+        });
+
+        // Article hover effects
+        document.querySelectorAll('.article-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.zIndex = '100';
+            });
+
+            card.addEventListener('mouseleave', () => {
+                setTimeout(() => {
+                    card.style.zIndex = '1';
+                }, 300);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,311 @@
+# Mimir Development Environment - Docker Compose
+# Comprehensive development setup with all services, debugging, and hot reload
+
+version: '3.8'
+
+services:
+  # ===================================
+  # Database Services
+  # ===================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: mimir_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mimir_news}
+      POSTGRES_USER: ${POSTGRES_USER:-mimir_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mimir_dev_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.utf8"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/postgres/init:/docker-entrypoint-initdb.d
+      - ./logs/postgres:/var/log/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mimir_user} -d ${POSTGRES_DB:-mimir_news}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - mimir_dev_network
+
+  # Connection pooler
+  pgbouncer:
+    image: pgbouncer/pgbouncer:latest
+    container_name: mimir_pgbouncer_dev
+    restart: unless-stopped
+    environment:
+      DATABASES_HOST: postgres
+      DATABASES_PORT: 5432
+      DATABASES_USER: ${POSTGRES_USER:-mimir_user}
+      DATABASES_PASSWORD: ${POSTGRES_PASSWORD:-mimir_dev_password}
+      DATABASES_DBNAME: ${POSTGRES_DB:-mimir_news}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 25
+      SERVER_RESET_QUERY: DISCARD ALL
+      SERVER_CHECK_DELAY: 30
+      LOG_CONNECTIONS: 1
+      LOG_DISCONNECTIONS: 1
+    ports:
+      - "${PGBOUNCER_PORT:-6432}:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./config/pgbouncer:/etc/pgbouncer
+      - ./logs/pgbouncer:/var/log/pgbouncer
+    networks:
+      - mimir_dev_network
+
+  # ===================================
+  # Cache and Message Queue
+  # ===================================
+  redis:
+    image: redis:7-alpine
+    container_name: mimir_redis_dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dev_redis_pass}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_dev_data:/data
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./logs/redis:/var/log/redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-dev_redis_pass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_redis_pass}
+    networks:
+      - mimir_dev_network
+
+  # ===================================
+  # Main Application Services
+  # ===================================
+  mimir-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      args:
+        - PYTHON_VERSION=3.11.7
+    container_name: mimir_api_dev
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mimir_user}:${POSTGRES_PASSWORD:-mimir_dev_password}@pgbouncer:5432/${POSTGRES_DB:-mimir_news}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      - LOG_LEVEL=DEBUG
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5000,http://localhost:5001
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./api:/app/api:ro
+      - ./auth:/app/auth:ro
+      - ./services:/app/services:ro
+      - ./logs/api:/app/logs
+      - ./config.json:/app/config.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mimir_dev_network
+
+  mimir-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mimir_web_dev
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mimir_user}:${POSTGRES_PASSWORD:-mimir_dev_password}@pgbouncer:5432/${POSTGRES_DB:-mimir_news}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      - LOG_LEVEL=DEBUG
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    ports:
+      - "${WEB_PORT:-5000}:5000"
+    volumes:
+      - .:/app:ro
+      - ./logs/web:/app/logs
+      - ./static:/app/static
+      - ./templates:/app/templates
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mimir_dev_network
+
+  mimir-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: mimir_worker_dev
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mimir_user}:${POSTGRES_PASSWORD:-mimir_dev_password}@pgbouncer:5432/${POSTGRES_DB:-mimir_news}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      - LOG_LEVEL=DEBUG
+      - WORKER_CONCURRENCY=2
+      - WORKER_MAX_TASKS_PER_CHILD=100
+    volumes:
+      - .:/app:ro
+      - ./logs/worker:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping", "-d", "celery@$HOSTNAME"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    networks:
+      - mimir_dev_network
+
+  mimir-analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.analytics
+    container_name: mimir_analytics_dev
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mimir_user}:${POSTGRES_PASSWORD:-mimir_dev_password}@pgbouncer:5432/${POSTGRES_DB:-mimir_news}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      - LOG_LEVEL=DEBUG
+      - ANALYTICS_PORT=5001
+    ports:
+      - "${ANALYTICS_PORT:-5001}:5001"
+    volumes:
+      - ./analytics:/app/analytics:ro
+      - ./logs/analytics:/app/logs
+      - ./static:/app/static
+      - ./templates:/app/templates
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+    networks:
+      - mimir_dev_network
+
+  # ===================================
+  # Monitoring and Development Tools
+  # ===================================
+  flower:
+    image: mher/flower:latest
+    container_name: mimir_flower_dev
+    restart: unless-stopped
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-dev_redis_pass}@redis:6379/0
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin}
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      - redis
+    networks:
+      - mimir_dev_network
+
+  # Database administration
+  adminer:
+    image: adminer:latest
+    container_name: mimir_adminer_dev
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha-dark
+    depends_on:
+      - postgres
+    networks:
+      - mimir_dev_network
+
+  # Redis administration
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: mimir_redis_commander_dev
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD:-dev_redis_pass}
+      - HTTP_USER=${REDIS_COMMANDER_USER:-admin}
+      - HTTP_PASSWORD=${REDIS_COMMANDER_PASSWORD:-admin}
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"
+    depends_on:
+      - redis
+    networks:
+      - mimir_dev_network
+
+  # ===================================
+  # Development Utilities
+  # ===================================
+  # File watcher for hot reload (development only)
+  file-watcher:
+    image: node:18-alpine
+    container_name: mimir_file_watcher_dev
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: >
+      sh -c "
+        npm install -g chokidar-cli &&
+        chokidar '**/*.py' --ignore '__pycache__/**' --ignore 'logs/**' --ignore '.git/**' -c 'echo File changed: {path} at {time}'
+      "
+    profiles:
+      - dev-tools
+    networks:
+      - mimir_dev_network
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+
+networks:
+  mimir_dev_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16

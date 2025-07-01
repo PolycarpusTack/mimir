@@ -1,0 +1,128 @@
+{
+  "sites": [
+    {
+      "name": "React News Site Example",
+      "url": "https://example-react-news.com",
+      "type": "html",
+      "enabled": false,
+      "category": "technology",
+      "js_required": true,
+      "playwright_settings": {
+        "wait_for_selector": ".article-container",
+        "wait_for_load_state": "networkidle",
+        "scroll_to_load": true,
+        "scroll_pause_time": 2000,
+        "authentication": {
+          "required": false,
+          "type": "none"
+        }
+      },
+      "selectors": {
+        "overview_article_link": "[data-testid='article-link']",
+        "detail_title": "h1.article-title",
+        "detail_date": "time[datetime]",
+        "detail_content": "div.article-content",
+        "detail_author": ".author-name"
+      },
+      "date_format": "%Y-%m-%d",
+      "note": "This site uses React and requires JavaScript execution"
+    },
+    {
+      "name": "Vue.js News Portal",
+      "url": "https://example-vue-news.com/latest",
+      "type": "html",
+      "enabled": false,
+      "category": "business",
+      "js_required": true,
+      "playwright_settings": {
+        "wait_for_selector": "#app",
+        "wait_for_load_state": "domcontentloaded",
+        "execute_script": "window.scrollTo(0, document.body.scrollHeight);",
+        "block_resources": ["image", "media", "font"],
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "selectors": {
+        "overview_article_link": ".news-item a",
+        "detail_title": ".article-header h1",
+        "detail_date": ".publish-date",
+        "detail_content": ".article-body",
+        "detail_author": ".author-info .name"
+      },
+      "pagination": {
+        "enabled": true,
+        "type": "infinite_scroll",
+        "scroll_times": 3,
+        "wait_between_scrolls": 2000
+      }
+    },
+    {
+      "name": "Angular News Dashboard",
+      "url": "https://example-angular-news.com/feed",
+      "type": "html",
+      "enabled": false,
+      "category": "finance",
+      "js_required": true,
+      "playwright_settings": {
+        "wait_for_angular": true,
+        "wait_for_selector": "app-article-list",
+        "intercept_api_calls": true,
+        "api_endpoints": [
+          "/api/v1/articles",
+          "/api/v1/articles/*"
+        ]
+      },
+      "selectors": {
+        "overview_article_link": "mat-card[role='article'] a",
+        "detail_title": ".article-title",
+        "detail_date": ".article-meta time",
+        "detail_content": ".article-content",
+        "detail_author": ".author-chip"
+      },
+      "authentication": {
+        "required": false,
+        "type": "cookie",
+        "cookie_name": "auth_token"
+      }
+    },
+    {
+      "name": "SPA with Lazy Loading",
+      "url": "https://example-spa-news.com",
+      "type": "html", 
+      "enabled": false,
+      "category": "technology",
+      "js_required": true,
+      "playwright_settings": {
+        "wait_for_function": "() => document.querySelectorAll('.article').length > 0",
+        "intercept_images": true,
+        "custom_headers": {
+          "X-Requested-With": "Playwright"
+        },
+        "handle_dialogs": true,
+        "dismiss_popups": true
+      },
+      "selectors": {
+        "overview_article_link": "[class*='article-link']",
+        "detail_title": "[class*='headline']",
+        "detail_date": "[class*='timestamp']",
+        "detail_content": "[class*='article-text']",
+        "detail_author": "[class*='byline']"
+      },
+      "fallback_to_beautifulsoup": false,
+      "note": "This site requires JS and won't work with BeautifulSoup"
+    }
+  ],
+  "playwright_defaults": {
+    "browser": "chromium",
+    "headless": true,
+    "timeout": 30000,
+    "retry_on_failure": true,
+    "take_screenshot_on_error": true,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "extra_http_headers": {
+      "Accept-Language": "en-US,en;q=0.9"
+    }
+  }
+}

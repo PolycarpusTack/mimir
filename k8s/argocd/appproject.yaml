@@ -1,0 +1,150 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: mimir-project
+  namespace: argocd
+spec:
+  description: Mimir News Scraper Project
+  
+  # Repository access
+  sourceRepos:
+    - 'https://github.com/your-org/mimir.git'
+    - 'https://charts.bitnami.com/bitnami'
+    - 'https://prometheus-community.github.io/helm-charts'
+    - 'https://grafana.github.io/helm-charts'
+    - 'https://jaegertracing.github.io/helm-charts'
+    - 'https://elastic.github.io/helm-charts'
+  
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: 'mimir-*'
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: logging
+      server: https://kubernetes.default.svc
+    - namespace: tracing
+      server: https://kubernetes.default.svc
+  
+  # RBAC policies for the project
+  roles:
+    - name: developer
+      description: Developer access to Mimir applications
+      policies:
+        - p, proj:mimir-project:developer, applications, get, mimir-project/*, allow
+        - p, proj:mimir-project:developer, applications, sync, mimir-project/mimir-development, allow
+        - p, proj:mimir-project:developer, applications, sync, mimir-project/mimir-staging, allow
+        - p, proj:mimir-project:developer, applications, action/*, mimir-project/mimir-development, allow
+        - p, proj:mimir-project:developer, applications, action/*, mimir-project/mimir-staging, allow
+        - p, proj:mimir-project:developer, logs, get, mimir-project/*, allow
+        - p, proj:mimir-project:developer, exec, create, mimir-project/mimir-development/*, allow
+      groups:
+        - mimir-developers
+        
+    - name: operator
+      description: Operations team access
+      policies:
+        - p, proj:mimir-project:operator, applications, *, mimir-project/*, allow
+        - p, proj:mimir-project:operator, repositories, *, *, allow
+        - p, proj:mimir-project:operator, logs, *, mimir-project/*, allow
+        - p, proj:mimir-project:operator, exec, *, mimir-project/*, allow
+      groups:
+        - mimir-operators
+        - platform-team
+        
+    - name: readonly
+      description: Read-only access
+      policies:
+        - p, proj:mimir-project:readonly, applications, get, mimir-project/*, allow
+        - p, proj:mimir-project:readonly, logs, get, mimir-project/*, allow
+      groups:
+        - mimir-readonly
+        - security-team
+  
+  # Namespace resource whitelist
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: ConfigMap
+    - group: ''
+      kind: Secret
+    - group: ''
+      kind: Service
+    - group: ''
+      kind: PersistentVolumeClaim
+    - group: ''
+      kind: Pod
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: apps
+      kind: ReplicaSet
+    - group: networking.k8s.io
+      kind: Ingress
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+    - group: batch
+      kind: Job
+    - group: batch
+      kind: CronJob
+    - group: policy
+      kind: PodSecurityPolicy
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+    - group: monitoring.coreos.com
+      kind: PrometheusRule
+  
+  # Cluster resource whitelist
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+  
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true
+    ignore:
+      - group: ''
+        kind: Secret
+        name: '*-token-*'
+      - group: ''
+        kind: ConfigMap
+        name: 'kube-root-ca.crt'
+  
+  # Sync windows (maintenance windows)
+  syncWindows:
+    - kind: allow
+      schedule: '0 6 * * 1-5'  # Weekdays 6 AM
+      duration: 8h
+      applications:
+        - mimir-development
+        - mimir-staging
+    - kind: allow
+      schedule: '0 2 * * 6'    # Saturday 2 AM
+      duration: 4h
+      applications:
+        - mimir-production
+    - kind: deny
+      schedule: '0 0 * * 0'    # Sunday (no deployments)
+      duration: 24h
+      applications:
+        - '*'
+  
+  # Signature keys for verification
+  signatureKeys:
+    - keyID: mimir-signing-key

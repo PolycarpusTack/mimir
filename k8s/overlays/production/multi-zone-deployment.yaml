@@ -1,0 +1,233 @@
+# Multi-Zone Deployment Configuration for High Availability
+# Ensures workloads are distributed across availability zones
+
+---
+# Patch for API deployment to ensure multi-zone distribution
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-api
+  namespace: mimir
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-api
+            app.kubernetes.io/component: api
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-api
+            app.kubernetes.io/component: api
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values:
+                - m5.large
+                - m5.xlarge
+                - m5.2xlarge
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - us-east-1a
+                - us-east-1b
+                - us-east-1c
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - mimir-api
+            topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - mimir-api
+              topologyKey: topology.kubernetes.io/zone
+---
+# Patch for Web deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-web
+  namespace: mimir
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-web
+            app.kubernetes.io/component: web
+---
+# Patch for Worker deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-worker
+  namespace: mimir
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-worker
+            app.kubernetes.io/component: worker
+      - maxSkew: 2
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-worker
+            app.kubernetes.io/component: worker
+---
+# Patch for Analytics deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-analytics
+  namespace: mimir
+spec:
+  template:
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-analytics
+            app.kubernetes.io/component: analytics
+---
+# StorageClass for multi-zone persistent volumes
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd-multi-zone
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: storage
+provisioner: kubernetes.io/aws-ebs  # Change based on cloud provider
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+  encrypted: "true"
+  kmsKeyId: "arn:aws:kms:region:account-id:key/key-id"  # Optional KMS key
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+mountOptions:
+  - debug
+allowedTopologies:
+- matchLabelExpressions:
+  - key: topology.kubernetes.io/zone
+    values:
+    - us-east-1a
+    - us-east-1b
+    - us-east-1c
+---
+# Priority classes for zone-aware scheduling
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: mimir-zone-critical
+value: 2000
+globalDefault: false
+description: "Critical services that must maintain zone distribution"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: mimir-zone-high
+value: 1500
+globalDefault: false
+description: "High priority services with zone preference"
+---
+# Network policy for cross-zone communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cross-zone
+  namespace: mimir
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: mimir
+    - podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: mimir
+    - podSelector: {}
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+# Service for zone-aware load balancing
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-api-zone-aware
+  namespace: mimir
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local  # Preserve client IP and reduce cross-zone traffic
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  - port: 443
+    targetPort: 8000
+    protocol: TCP
+    name: https
+  selector:
+    app.kubernetes.io/name: mimir-api
+    app.kubernetes.io/component: api

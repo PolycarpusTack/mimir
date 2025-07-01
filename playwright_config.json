@@ -1,0 +1,103 @@
+{
+    "browsers": {
+        "chromium": {
+            "enabled": true,
+            "headless": true,
+            "args": [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-gpu"
+            ],
+            "download_host": "",
+            "proxy": null
+        },
+        "firefox": {
+            "enabled": false,
+            "headless": true,
+            "args": [],
+            "proxy": null
+        },
+        "webkit": {
+            "enabled": false,
+            "headless": true,
+            "args": [],
+            "proxy": null
+        }
+    },
+    "defaults": {
+        "viewport": {
+            "width": 1920,
+            "height": 1080
+        },
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "locale": "en-US",
+        "timezone": "America/New_York",
+        "permissions": [],
+        "extra_http_headers": {
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+    },
+    "timeouts": {
+        "page_load": 30000,
+        "element_wait": 10000,
+        "script_execution": 5000,
+        "navigation": 30000
+    },
+    "performance": {
+        "block_resources": ["image", "font", "media"],
+        "block_urls": [],
+        "intercept_requests": true,
+        "cache_enabled": true
+    },
+    "stealth": {
+        "enabled": true,
+        "plugins": [
+            "chrome.app",
+            "chrome.csi",
+            "chrome.loadTimes",
+            "chrome.runtime",
+            "iframe.contentWindow",
+            "media.codecs",
+            "navigator.hardwareConcurrency",
+            "navigator.languages",
+            "navigator.permissions",
+            "navigator.plugins",
+            "navigator.webdriver",
+            "webgl.vendor",
+            "window.outerdimensions"
+        ]
+    },
+    "screenshots": {
+        "enabled": true,
+        "on_error": true,
+        "on_success": false,
+        "path": "logs/playwright_screenshots",
+        "format": "png",
+        "quality": 80,
+        "full_page": false
+    },
+    "wait_strategies": {
+        "default": "domcontentloaded",
+        "options": ["load", "domcontentloaded", "networkidle"],
+        "custom_selectors": {
+            "react_loaded": "#react-root, [data-reactroot], [data-react-app]",
+            "vue_loaded": "[data-v-], .vue-app, #app[data-vue]",
+            "angular_loaded": "[ng-app], [ng-controller], app-root"
+        }
+    },
+    "error_handling": {
+        "max_retries": 3,
+        "retry_delay": 2000,
+        "ignore_https_errors": true,
+        "ignore_cert_errors": true,
+        "continue_on_error": true
+    },
+    "debugging": {
+        "slow_mo": 0,
+        "devtools": false,
+        "video_recording": false,
+        "trace_enabled": false
+    }
+}

@@ -1,0 +1,2573 @@
+{
+  "timestamp": "2024-01-01T00:00:00Z",
+  "summary": {
+    "total_issues": 305,
+    "critical": 3,
+    "high": 133,
+    "medium": 169,
+    "low": 0,
+    "fixes_applied": 104
+  },
+  "issues_by_category": {
+    "missing_error_handling": [
+      {
+        "type": "missing_error_handling",
+        "file": "advanced_deduplication.py",
+        "line": 751,
+        "content": "with open(args.output, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "ai_monitoring.py",
+        "line": 94,
+        "content": "with open(baseline_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "ai_monitoring.py",
+        "line": 101,
+        "content": "with open(baseline_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "ai_monitoring.py",
+        "line": 478,
+        "content": "with open(events_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "ai_monitoring.py",
+        "line": 483,
+        "content": "with open(events_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "ai_monitoring.py",
+        "line": 579,
+        "content": "with open(output_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "analyze_debt_issues.py",
+        "line": 14,
+        "content": "with open('detailed_report.json', 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "async_monitor.py",
+        "line": 301,
+        "content": "with open(filename, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "async_scraper.py",
+        "line": 919,
+        "content": "with open(CONFIG_FILE, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "async_scraper.py",
+        "line": 921,
+        "content": "with open(SITES_FILE, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 69,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 76,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 170,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 183,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 252,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 288,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 318,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 327,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 347,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 379,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 426,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 446,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 459,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "autofix_technical_debt.py",
+        "line": 479,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "celery_app.py",
+        "line": 19,
+        "content": "with open(CONFIG_FILE, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "celery_tasks.py",
+        "line": 31,
+        "content": "with open(CONFIG_FILE, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "celery_tasks.py",
+        "line": 33,
+        "content": "with open(SITES_FILE, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "celery_tasks.py",
+        "line": 479,
+        "content": "with open(report_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "custom_entity_training.py",
+        "line": 498,
+        "content": "data.append(json.loads(line))",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "custom_entity_training.py",
+        "line": 83,
+        "content": "with open(self.training_data_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "custom_entity_training.py",
+        "line": 97,
+        "content": "with open(self.training_data_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "custom_entity_training.py",
+        "line": 463,
+        "content": "with open(output_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "custom_entity_training.py",
+        "line": 466,
+        "content": "with open(output_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "custom_entity_training.py",
+        "line": 492,
+        "content": "with open(input_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "custom_entity_training.py",
+        "line": 496,
+        "content": "with open(input_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "db_adapter.py",
+        "line": 65,
+        "content": "with open('sites_to_scrape.json', 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "embedding_pipeline.py",
+        "line": 249,
+        "content": "task_data = json.loads(result[0][0])",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 16,
+        "content": "with open(file_path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 41,
+        "content": "with open(file_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 48,
+        "content": "with open(file_path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 78,
+        "content": "with open(file_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 85,
+        "content": "with open(file_path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 117,
+        "content": "with open(file_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 124,
+        "content": "with open(file_path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 176,
+        "content": "with open(file_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 193,
+        "content": "with open(path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 207,
+        "content": "with open(path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 217,
+        "content": "with open(file_path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 235,
+        "content": "with open(file_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 252,
+        "content": "with open(path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_remaining_issues.py",
+        "line": 257,
+        "content": "with open(path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_technical_debt_epic5.py",
+        "line": 30,
+        "content": "with open(filepath, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_technical_debt_epic5.py",
+        "line": 46,
+        "content": "with open(filepath, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "fix_technical_debt_epic5.py",
+        "line": 394,
+        "content": "with open(report_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "industry_classification.py",
+        "line": 195,
+        "content": "with open(config_path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "keyword_extraction.py",
+        "line": 115,
+        "content": "with open(lang_file, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "load_testing.py",
+        "line": 213,
+        "content": "with open('config.json', 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "load_testing.py",
+        "line": 215,
+        "content": "with open('sites_to_scrape.json', 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "load_testing.py",
+        "line": 406,
+        "content": "with open(f\"reports/{results_file}\", 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "migrate_to_postgres.py",
+        "line": 196,
+        "content": "keywords = json.loads(article['keywords_found'])",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "migrate_to_postgres.py",
+        "line": 59,
+        "content": "with open(config_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "migrate_to_postgres.py",
+        "line": 130,
+        "content": "with open(config_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "nlp_service.py",
+        "line": 167,
+        "content": "result_dict = json.loads(result_data)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "nlp_service.py",
+        "line": 176,
+        "content": "result_dict = json.loads(result_data)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "nlp_service.py",
+        "line": 297,
+        "content": "task_dict = json.loads(task_data)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 40,
+        "content": "with open(filepath, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 108,
+        "content": "with open(filepath, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 141,
+        "content": "with open(filepath, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 162,
+        "content": "with open(pg_file, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 195,
+        "content": "with open(migration_file, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 281,
+        "content": "with open(db_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 291,
+        "content": "with open(test_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 327,
+        "content": "with open(doc_path, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "quality_check.py",
+        "line": 427,
+        "content": "with open('quality_report.json', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "redis_cache.py",
+        "line": 144,
+        "content": "return json.loads(data.decode())",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scraper.py",
+        "line": 64,
+        "content": "with open(CONFIG_FILE, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scraper.py",
+        "line": 66,
+        "content": "with open(SITES_FILE, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "semantic_search.py",
+        "line": 668,
+        "content": "with open(index_dir / \"article_ids.json\", 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "semantic_search.py",
+        "line": 689,
+        "content": "with open(ids_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 71,
+        "content": "with open(config_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 80,
+        "content": "with open(config_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 102,
+        "content": "with open('celerybeat-schedule.json', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 157,
+        "content": "with open('docker-compose.epic4.yml', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 178,
+        "content": "with open('start_celery_worker.sh', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 192,
+        "content": "with open('start_celery_beat.sh', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 204,
+        "content": "with open('start_async_scraper.sh', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 252,
+        "content": "with open('health_check_results.json', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_epic4.py",
+        "line": 262,
+        "content": "with open('health_check.py', 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "setup_sentence_transformers.py",
+        "line": 399,
+        "content": "with open(output_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 576,
+        "content": "data = json.loads(output)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 121,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 402,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 437,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 485,
+        "content": "with open(requirements_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 734,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 748,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 796,
+        "content": "with open(init_file_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "technical_debt_scanner.py",
+        "line": 880,
+        "content": "with open(args.output, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "topic_modeling.py",
+        "line": 535,
+        "content": "with open(output_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "topic_modeling.py",
+        "line": 603,
+        "content": "with open(filepath, 'wb') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "topic_modeling.py",
+        "line": 616,
+        "content": "with open(filepath, 'rb') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "api/middleware/usage_tracking.py",
+        "line": 174,
+        "content": "data = json.loads(body)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "api/middleware/usage_tracking.py",
+        "line": 184,
+        "content": "data = json.loads(body)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "api/utils/pagination.py",
+        "line": 181,
+        "content": "cursor_data = json.loads(decoded)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 78,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 225,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 237,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 276,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 301,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 397,
+        "content": "with open(config_file, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 409,
+        "content": "with open(config_file, 'a', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 431,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 452,
+        "content": "with open(file_path, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/fix_common_issues.py",
+        "line": 640,
+        "content": "with open(args.output, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/security_config.py",
+        "line": 121,
+        "content": "with open(self.config_file, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/security_config.py",
+        "line": 134,
+        "content": "with open(self.config_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/security_config.py",
+        "line": 197,
+        "content": "with open(scan_report_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/security_config.py",
+        "line": 229,
+        "content": "with open(summary_path, 'w') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/security_config.py",
+        "line": 254,
+        "content": "with open(req_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/security_config.py",
+        "line": 275,
+        "content": "with open(dockerfile, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "scripts/security_config.py",
+        "line": 292,
+        "content": "with open(config_file, 'r') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "security/security_scanner.py",
+        "line": 539,
+        "content": "safety_data = json.loads(proc.stdout)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "security/security_scanner.py",
+        "line": 369,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "security/security_scanner.py",
+        "line": 491,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "security/security_scanner.py",
+        "line": 591,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "security/security_scanner.py",
+        "line": 643,
+        "content": "with open(file_path, 'r', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "security/security_scanner.py",
+        "line": 807,
+        "content": "with open(output_file, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "security/security_scanner.py",
+        "line": 831,
+        "content": "with open(args.output, 'w', encoding='utf-8') as f:",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "services/alert_scheduler.py",
+        "line": 167,
+        "content": "query_data = json.loads(query_data)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "services/alert_scheduler.py",
+        "line": 375,
+        "content": "query_data = json.loads(query_data)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "services/saved_search_analytics.py",
+        "line": 153,
+        "content": "query_data = json.loads(query_data)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "services/saved_search_analytics.py",
+        "line": 343,
+        "content": "query_data = json.loads(query_data)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      },
+      {
+        "type": "missing_error_handling",
+        "file": "services/saved_search_manager.py",
+        "line": 612,
+        "content": "query = json.loads(query)",
+        "severity": "high",
+        "fix_suggestion": "Add try-except blocks to handle potential exceptions"
+      }
+    ],
+    "missing_async": [
+      {
+        "type": "missing_async",
+        "file": "advanced_deduplication.py",
+        "line": 365,
+        "content": "def find_near_duplicates(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'find_near_duplicates' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "advanced_deduplication.py",
+        "line": 557,
+        "content": "def comprehensive_deduplication(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'comprehensive_deduplication' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "advanced_deduplication.py",
+        "line": 691,
+        "content": "def save_duplicates_to_database(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'save_duplicates_to_database' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "ai_scraper_integration.py",
+        "line": 24,
+        "content": "def analyze_recent_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'analyze_recent_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "ai_scraper_integration.py",
+        "line": 129,
+        "content": "def analyze_by_source(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'analyze_by_source' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_app.py",
+        "line": 238,
+        "content": "def health_check(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'health_check' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_app.py",
+        "line": 265,
+        "content": "def get_queue_length(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_queue_length' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_app.py",
+        "line": 141,
+        "content": "def record_task_start(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'record_task_start' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_app.py",
+        "line": 153,
+        "content": "def record_task_end(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'record_task_end' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_app.py",
+        "line": 170,
+        "content": "def get_task_metrics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_task_metrics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_tasks.py",
+        "line": 252,
+        "content": "def send_notification(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'send_notification' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_tasks.py",
+        "line": 335,
+        "content": "def schedule_ai_processing(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'schedule_ai_processing' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "celery_tasks.py",
+        "line": 384,
+        "content": "def cleanup_old_data(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'cleanup_old_data' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 134,
+        "content": "def check_migration_status(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'check_migration_status' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 171,
+        "content": "def update_article_metadata(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'update_article_metadata' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 195,
+        "content": "def count_analyzed_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'count_analyzed_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 223,
+        "content": "def get_unanalyzed_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_unanalyzed_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 257,
+        "content": "def get_article_by_id(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_article_by_id' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 302,
+        "content": "def get_article_count_by_language(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_article_count_by_language' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 322,
+        "content": "def get_sentiment_distribution(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_sentiment_distribution' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 342,
+        "content": "def get_top_entities(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_top_entities' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_adapter.py",
+        "line": 363,
+        "content": "def get_top_keywords(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_top_keywords' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 26,
+        "content": "def init_db(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'init_db' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 90,
+        "content": "def article_exists(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'article_exists' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 97,
+        "content": "def add_article(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'add_article' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 122,
+        "content": "def add_keyword_alert(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'add_keyword_alert' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 132,
+        "content": "def start_scrape_run(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'start_scrape_run' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 141,
+        "content": "def end_scrape_run(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'end_scrape_run' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 153,
+        "content": "def log_scrape_error(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'log_scrape_error' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 162,
+        "content": "def get_recent_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_recent_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 174,
+        "content": "def get_articles_by_keyword(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_articles_by_keyword' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 187,
+        "content": "def mark_articles_as_read(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'mark_articles_as_read' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager.py",
+        "line": 196,
+        "content": "def get_statistics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_statistics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 104,
+        "content": "def init_db(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'init_db' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 155,
+        "content": "def article_exists(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'article_exists' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 165,
+        "content": "def add_article(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'add_article' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 220,
+        "content": "def add_keyword_alert(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'add_keyword_alert' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 247,
+        "content": "def start_scrape_run(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'start_scrape_run' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 258,
+        "content": "def end_scrape_run(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'end_scrape_run' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 275,
+        "content": "def log_scrape_error(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'log_scrape_error' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 300,
+        "content": "def get_recent_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_recent_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 314,
+        "content": "def search_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'search_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 334,
+        "content": "def get_articles_by_keyword(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_articles_by_keyword' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 349,
+        "content": "def mark_articles_as_read(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'mark_articles_as_read' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 363,
+        "content": "def get_statistics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_statistics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 427,
+        "content": "def update_source_stats(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'update_source_stats' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 451,
+        "content": "def get_active_sources(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_active_sources' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 465,
+        "content": "def cleanup_old_data(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'cleanup_old_data' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_postgres.py",
+        "line": 222,
+        "content": "def _add_alert(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_add_alert' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 559,
+        "content": "def verify_semantic_setup(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'verify_semantic_setup' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 44,
+        "content": "def _verify_pgvector(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_verify_pgvector' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 64,
+        "content": "def store_embedding(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'store_embedding' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 173,
+        "content": "def get_embedding(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_embedding' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 211,
+        "content": "def get_articles_without_embeddings(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_articles_without_embeddings' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 254,
+        "content": "def semantic_search(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'semantic_search' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 292,
+        "content": "def hybrid_search(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'hybrid_search' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 332,
+        "content": "def find_similar_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'find_similar_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 366,
+        "content": "def get_embedding_statistics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_embedding_statistics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 424,
+        "content": "def cleanup_old_embeddings(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'cleanup_old_embeddings' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 467,
+        "content": "def update_vector_index(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'update_vector_index' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "db_manager_semantic.py",
+        "line": 514,
+        "content": "def get_duplicate_candidates(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_duplicate_candidates' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "embedding_pipeline.py",
+        "line": 162,
+        "content": "def _initialize_redis(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_initialize_redis' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "embedding_pipeline.py",
+        "line": 224,
+        "content": "def add_task(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'add_task' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "embedding_pipeline.py",
+        "line": 243,
+        "content": "def get_next_task(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_next_task' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "embedding_pipeline.py",
+        "line": 477,
+        "content": "def store_results(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'store_results' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "embedding_pipeline.py",
+        "line": 685,
+        "content": "def get_statistics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_statistics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "entity_linking.py",
+        "line": 283,
+        "content": "def _get_wikidata_from_wikipedia(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_get_wikidata_from_wikipedia' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "entity_linking.py",
+        "line": 318,
+        "content": "def _get_wikidata_info_uncached(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_get_wikidata_info_uncached' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "entity_linking.py",
+        "line": 374,
+        "content": "def _get_wikidata_aliases(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_get_wikidata_aliases' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 91,
+        "content": "def connect(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'connect' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 111,
+        "content": "def disconnect(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'disconnect' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 134,
+        "content": "def publish(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'publish' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 287,
+        "content": "def connect(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'connect' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 309,
+        "content": "def _create_consumer_groups(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_create_consumer_groups' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 507,
+        "content": "def add_websocket_client(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'add_websocket_client' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 511,
+        "content": "def remove_websocket_client(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'remove_websocket_client' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 516,
+        "content": "def add_sse_client(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'add_sse_client' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "event_streaming.py",
+        "line": 520,
+        "content": "def remove_sse_client(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'remove_sse_client' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 44,
+        "content": "def get_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 65,
+        "content": "def search_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'search_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 89,
+        "content": "def get_statistics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_statistics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 105,
+        "content": "def get_health_check(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_health_check' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 119,
+        "content": "def trigger_scraping_task(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'trigger_scraping_task' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 133,
+        "content": "def check_task_status(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'check_task_status' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 164,
+        "content": "def setup(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'setup' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 182,
+        "content": "def collect_system_metrics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'collect_system_metrics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "load_testing.py",
+        "line": 330,
+        "content": "def redis_performance_test(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'redis_performance_test' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "nlp_service.py",
+        "line": 98,
+        "content": "def _connect_redis(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_connect_redis' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "nlp_service.py",
+        "line": 121,
+        "content": "def submit_task(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'submit_task' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "nlp_service.py",
+        "line": 148,
+        "content": "def get_result(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_result' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "nlp_service.py",
+        "line": 198,
+        "content": "def stop_workers(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'stop_workers' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "nlp_service.py",
+        "line": 217,
+        "content": "def get_queue_stats(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_queue_stats' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "nlp_service.py",
+        "line": 271,
+        "content": "def run(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'run' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "nlp_service.py",
+        "line": 313,
+        "content": "def _process_task(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_process_task' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "quick_start.py",
+        "line": 29,
+        "content": "def initialize_database(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'initialize_database' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 75,
+        "content": "def connect(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'connect' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 115,
+        "content": "def disconnect(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'disconnect' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 150,
+        "content": "def get(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 171,
+        "content": "def set(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'set' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 191,
+        "content": "def delete(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'delete' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 208,
+        "content": "def exists(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'exists' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 280,
+        "content": "def get_multi(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_multi' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 304,
+        "content": "def set_multi(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'set_multi' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 344,
+        "content": "def invalidate_pattern(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'invalidate_pattern' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 367,
+        "content": "def get_stats(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_stats' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 403,
+        "content": "def cleanup_expired_keys(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'cleanup_expired_keys' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 426,
+        "content": "def get_memory_usage(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_memory_usage' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "redis_cache.py",
+        "line": 445,
+        "content": "def health_check(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'health_check' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "resilience.py",
+        "line": 361,
+        "content": "def retry(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'retry' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "resilience.py",
+        "line": 373,
+        "content": "def timeout(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'timeout' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "resilience.py",
+        "line": 385,
+        "content": "def bulkhead(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'bulkhead' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "resilience.py",
+        "line": 225,
+        "content": "def __init__(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '__init__' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "resilience.py",
+        "line": 363,
+        "content": "def decorator(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'decorator' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "resilience.py",
+        "line": 375,
+        "content": "def decorator(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'decorator' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "resilience.py",
+        "line": 387,
+        "content": "def decorator(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'decorator' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "scraper.py",
+        "line": 103,
+        "content": "def fetch_url(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'fetch_url' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "scraper.py",
+        "line": 152,
+        "content": "def parse_rss_feed(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'parse_rss_feed' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "scraper.py",
+        "line": 443,
+        "content": "def run_scraper(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'run_scraper' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "security.py",
+        "line": 156,
+        "content": "def is_allowed(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'is_allowed' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "security.py",
+        "line": 184,
+        "content": "def get_stats(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_stats' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "semantic_search.py",
+        "line": 120,
+        "content": "def _initialize_redis(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_initialize_redis' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "semantic_search.py",
+        "line": 218,
+        "content": "def _get_cached_embedding(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_get_cached_embedding' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "semantic_search.py",
+        "line": 238,
+        "content": "def _cache_embedding(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_cache_embedding' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "semantic_search.py",
+        "line": 260,
+        "content": "def build_article_index(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'build_article_index' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "semantic_search.py",
+        "line": 534,
+        "content": "def detect_duplicates(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'detect_duplicates' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "setup_epic4.py",
+        "line": 38,
+        "content": "def check_redis(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'check_redis' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "setup_epic4.py",
+        "line": 210,
+        "content": "def create_monitoring_script(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'create_monitoring_script' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "web_interface.py",
+        "line": 46,
+        "content": "def get_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "web_interface.py",
+        "line": 89,
+        "content": "def get_keyword_alerts(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_keyword_alerts' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "web_interface.py",
+        "line": 107,
+        "content": "def get_scrape_runs(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_scrape_runs' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "api/middleware.py",
+        "line": 167,
+        "content": "def _get_client_ip(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_get_client_ip' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "scripts/fix_common_issues.py",
+        "line": 164,
+        "content": "def _should_be_async(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making '_should_be_async' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 45,
+        "content": "def read_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'read_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 68,
+        "content": "def search_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'search_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 93,
+        "content": "def get_analytics_summary(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_analytics_summary' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 109,
+        "content": "def create_article(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'create_article' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 132,
+        "content": "def get_saved_searches(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_saved_searches' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 145,
+        "content": "def create_saved_search(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'create_saved_search' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 169,
+        "content": "def get_dashboards(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_dashboards' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 182,
+        "content": "def health_check(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'health_check' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 208,
+        "content": "def read_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'read_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 214,
+        "content": "def search_articles(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'search_articles' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 221,
+        "content": "def get_analytics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'get_analytics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 226,
+        "content": "def health_check(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'health_check' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 244,
+        "content": "def manage_users(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'manage_users' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 249,
+        "content": "def view_analytics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'view_analytics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 260,
+        "content": "def manage_subscriptions(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'manage_subscriptions' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 265,
+        "content": "def manage_webhooks(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'manage_webhooks' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 270,
+        "content": "def create_dashboard(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'create_dashboard' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 301,
+        "content": "def rapid_requests(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'rapid_requests' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 375,
+        "content": "def basic_search(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'basic_search' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 381,
+        "content": "def advanced_search(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'advanced_search' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 391,
+        "content": "def search_analytics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'search_analytics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 399,
+        "content": "def summary_analytics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'summary_analytics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 404,
+        "content": "def source_analytics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'source_analytics' async if it performs I/O operations"
+      },
+      {
+        "type": "missing_async",
+        "file": "tests/locustfile.py",
+        "line": 408,
+        "content": "def trend_analytics(...)",
+        "severity": "medium",
+        "fix_suggestion": "Consider making 'trend_analytics' async if it performs I/O operations"
+      }
+    ],
+    "bare_except": [
+      {
+        "type": "bare_except",
+        "file": "advanced_deduplication.py",
+        "line": 202,
+        "content": "except:",
+        "severity": "medium",
+        "fix_suggestion": "Use specific exception types instead of bare except"
+      },
+      {
+        "type": "bare_except",
+        "file": "async_db_manager.py",
+        "line": 413,
+        "content": "except:",
+        "severity": "medium",
+        "fix_suggestion": "Use specific exception types instead of bare except"
+      },
+      {
+        "type": "bare_except",
+        "file": "entity_linking.py",
+        "line": 192,
+        "content": "except:",
+        "severity": "medium",
+        "fix_suggestion": "Use specific exception types instead of bare except"
+      },
+      {
+        "type": "bare_except",
+        "file": "industry_classification.py",
+        "line": 471,
+        "content": "except:",
+        "severity": "medium",
+        "fix_suggestion": "Use specific exception types instead of bare except"
+      },
+      {
+        "type": "bare_except",
+        "file": "topic_modeling.py",
+        "line": 448,
+        "content": "except:",
+        "severity": "medium",
+        "fix_suggestion": "Use specific exception types instead of bare except"
+      }
+    ],
+    "hardcoded_config": [
+      {
+        "type": "hardcoded_config",
+        "file": "embedding_pipeline.py",
+        "line": 165,
+        "content": "self.redis_client = redis.Redis(host='localhost', port=6379, db=1)",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      },
+      {
+        "type": "hardcoded_config",
+        "file": "semantic_search.py",
+        "line": 123,
+        "content": "self.redis_client = redis.Redis(host='localhost', port=6379, db=0)",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      },
+      {
+        "type": "hardcoded_config",
+        "file": "setup_epic4.py",
+        "line": 42,
+        "content": "client = redis.Redis(host='localhost', port=6379, db=0)",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      },
+      {
+        "type": "hardcoded_config",
+        "file": "setup_epic4.py",
+        "line": 221,
+        "content": "client = redis.Redis(host='localhost', port=6379, db=0)",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      },
+      {
+        "type": "hardcoded_config",
+        "file": "web_interface.py",
+        "line": 363,
+        "content": "app.run(debug=True, port=5000)",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      },
+      {
+        "type": "hardcoded_config",
+        "file": "api/app.py",
+        "line": 315,
+        "content": "port=8000,",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      },
+      {
+        "type": "hardcoded_config",
+        "file": "api/app.py",
+        "line": 325,
+        "content": "port=8000,",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      },
+      {
+        "type": "hardcoded_config",
+        "file": "scripts/fix_common_issues.py",
+        "line": 281,
+        "content": "# Fix hardcoded debug=True",
+        "severity": "medium",
+        "fix_suggestion": "Move configuration to environment variables or config files"
+      }
+    ],
+    "sql_injection_risk": [
+      {
+        "type": "sql_injection_risk",
+        "file": "scripts/fix_common_issues.py",
+        "line": 61,
+        "content": "r'f\".*{.*}.*\".*execute',",
+        "severity": "critical",
+        "fix_suggestion": "Use parameterized queries with placeholders instead of string formatting"
+      },
+      {
+        "type": "sql_injection_risk",
+        "file": "scripts/fix_common_issues.py",
+        "line": 63,
+        "content": "r'%.*%.*execute'",
+        "severity": "critical",
+        "fix_suggestion": "Use parameterized queries with placeholders instead of string formatting"
+      },
+      {
+        "type": "sql_injection_risk",
+        "file": "security/security_scanner.py",
+        "line": 166,
+        "content": "'pattern': r'%.*?%.*?(execute|query)',",
+        "severity": "critical",
+        "fix_suggestion": "Use parameterized queries with placeholders instead of string formatting"
+      }
+    ]
+  },
+  "fixes_applied": [
+    "Fixed imports in advanced_deduplication.py",
+    "Fixed imports in ai_analysis.py",
+    "Fixed imports in ai_exceptions.py",
+    "Fixed imports in ai_monitoring.py",
+    "Fixed imports in ai_optimization.py",
+    "Fixed imports in ai_scraper_integration.py",
+    "Fixed imports in analyze_debt_issues.py",
+    "Fixed imports in async_db_manager.py",
+    "Fixed imports in async_monitor.py",
+    "Fixed imports in async_scraper.py",
+    "Fixed imports in autofix_technical_debt.py",
+    "Fixed imports in celery_app.py",
+    "Fixed imports in celery_tasks.py",
+    "Fixed imports in custom_entity_training.py",
+    "Fixed imports in db_adapter.py",
+    "Fixed imports in db_manager.py",
+    "Fixed imports in db_manager_postgres.py",
+    "Fixed imports in db_manager_semantic.py",
+    "Fixed imports in embedding_pipeline.py",
+    "Fixed imports in entity_extraction.py",
+    "Fixed imports in entity_linking.py",
+    "Fixed imports in event_streaming.py",
+    "Fixed imports in fix_technical_debt_epic5.py",
+    "Fixed imports in industry_classification.py",
+    "Fixed imports in keyword_extraction.py",
+    "Fixed imports in load_testing.py",
+    "Fixed imports in nlp_preprocessing.py",
+    "Fixed imports in nlp_service.py",
+    "Fixed imports in quality_check.py",
+    "Fixed imports in quick_start.py",
+    "Fixed imports in redis_cache.py",
+    "Fixed imports in resilience.py",
+    "Fixed imports in scraper.py",
+    "Fixed imports in security.py",
+    "Fixed imports in semantic_search.py",
+    "Fixed imports in sentiment_analysis.py",
+    "Fixed imports in setup_epic4.py",
+    "Fixed imports in setup_sentence_transformers.py",
+    "Fixed imports in technical_debt_scanner.py",
+    "Fixed imports in test_semantic_search.py",
+    "Fixed imports in topic_modeling.py",
+    "Fixed imports in web_interface.py",
+    "Fixed imports in api/app.py",
+    "Fixed imports in api/dependencies.py",
+    "Fixed imports in api/middleware.py",
+    "Fixed imports in api/models.py",
+    "Fixed imports in api/__init__.py",
+    "Fixed imports in api/decorators/feature_flags.py",
+    "Fixed imports in api/models/dashboard.py",
+    "Fixed imports in api/routers/analytics.py",
+    "Fixed imports in api/routers/api_keys.py",
+    "Fixed imports in api/routers/articles.py",
+    "Fixed imports in api/routers/auth.py",
+    "Fixed imports in api/routers/dashboards.py",
+    "Fixed imports in api/routers/keywords.py",
+    "Fixed imports in api/routers/notifications.py",
+    "Fixed imports in api/routers/organizations.py",
+    "Fixed imports in api/routers/saved_searches.py",
+    "Fixed imports in api/routers/saved_search_analytics.py",
+    "Fixed imports in api/routers/search.py",
+    "Fixed imports in api/routers/sources.py",
+    "Fixed imports in api/routers/subscriptions.py",
+    "Fixed imports in api/routers/usage.py",
+    "Fixed imports in api/routers/users.py",
+    "Fixed imports in api/routers/webhooks.py",
+    "Fixed imports in api/utils/bulk_operations.py",
+    "Fixed imports in api/utils/filtering.py",
+    "Fixed imports in api/utils/pagination.py",
+    "Fixed imports in api/utils/sorting.py",
+    "Fixed imports in api/utils/validation.py",
+    "Fixed imports in api/utils/__init__.py",
+    "Fixed imports in auth/api_key_manager.py",
+    "Fixed imports in auth/auth_manager.py",
+    "Fixed imports in auth/decorators.py",
+    "Fixed imports in auth/jwt_handler.py",
+    "Fixed imports in auth/rbac.py",
+    "Fixed imports in auth/tenant_context.py",
+    "Fixed imports in auth/__init__.py",
+    "Fixed imports in performance/monitoring.py",
+    "Fixed imports in performance/optimizer.py",
+    "Fixed imports in scripts/fix_common_issues.py",
+    "Fixed imports in scripts/security_config.py",
+    "Fixed imports in security/security_scanner.py",
+    "Fixed imports in services/alert_scheduler.py",
+    "Fixed imports in services/dashboard_manager.py",
+    "Fixed imports in services/notification_service.py",
+    "Fixed imports in services/saved_search_analytics.py",
+    "Fixed imports in services/saved_search_manager.py",
+    "Fixed imports in services/subscription_manager.py",
+    "Fixed imports in services/usage_metering.py",
+    "Fixed imports in services/widget_data_service.py",
+    "Fixed imports in tests/conftest.py",
+    "Fixed imports in tests/locustfile.py",
+    "Fixed imports in tests/test_ai_pipeline.py",
+    "Fixed imports in tests/test_api_saved_searches.py",
+    "Fixed imports in tests/test_db_postgres.py",
+    "Fixed imports in tests/test_notification_service.py",
+    "Fixed imports in tests/test_runner.py",
+    "Fixed imports in tests/test_saved_searches.py",
+    "Fixed imports in tests/api/test_contract.py",
+    "Fixed imports in tests/integration/test_api_workflows.py",
+    "Fixed imports in tests/performance/test_load.py",
+    "Fixed security issues in web_interface.py",
+    "Fixed security issues in scripts/fix_common_issues.py"
+  ],
+  "recommendations": [
+    "URGENT: Fix SQL injection vulnerabilities immediately",
+    "Implement proper configuration management with environment variables"
+  ]
+}

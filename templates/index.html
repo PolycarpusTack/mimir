@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mimir News Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }        
+        .subtitle {
+            text-align: center;
+            opacity: 0.9;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+        }        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1em;
+            color: #666;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .content-section {
+            display: none;
+            animation: fadeIn 0.3s;
+        }
+        
+        .content-section.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }        
+        .article-card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+        
+        .article-card:hover {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .article-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .article-meta {
+            display: flex;
+            gap: 20px;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .article-summary {
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        
+        .article-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .article-link:hover {
+            text-decoration: underline;
+        }        
+        .keyword-badge {
+            display: inline-block;
+            background: #e74c3c;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-right: 5px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .search-bar {
+            width: 100%;
+            padding: 12px 20px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #5a67d8;
+        }
+    </style>
+</head>
+<body>    <header>
+        <div class="container">
+            <h1>🚀 Mimir News Dashboard</h1>
+            <p class="subtitle">B2B Nieuws Aggregator & Monitor</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <!-- Statistieken -->
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number" id="total-articles">-</div>
+                <div class="stat-label">Totale Artikelen</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="today-articles">-</div>
+                <div class="stat-label">Vandaag</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="total-sources">-</div>
+                <div class="stat-label">Bronnen</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="total-keywords">-</div>
+                <div class="stat-label">Keyword Alerts</div>
+            </div>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('articles')">📰 Artikelen</button>
+            <button class="tab" onclick="showTab('keywords')">🔍 Keywords</button>
+            <button class="tab" onclick="showTab('runs')">📊 Scrape Runs</button>
+        </div>        
+        <!-- Artikelen Sectie -->
+        <div id="articles" class="content-section active">
+            <input type="text" class="search-bar" id="search-input" placeholder="Zoek artikelen...">
+            <button class="btn" onclick="markAllRead()">Markeer alles als gelezen</button>
+            <div id="articles-list" class="loading">Artikelen laden...</div>
+        </div>
+        
+        <!-- Keywords Sectie -->
+        <div id="keywords" class="content-section">
+            <div id="keywords-list" class="loading">Keywords laden...</div>
+        </div>
+        
+        <!-- Runs Sectie -->
+        <div id="runs" class="content-section">
+            <div id="runs-list" class="loading">Runs laden...</div>
+        </div>
+    </div>
+    
+    <script>
+        let currentTab = 'articles';
+        
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+            
+            currentTab = tabName;
+            if (tabName === 'articles') loadArticles();
+            else if (tabName === 'keywords') loadKeywords();
+            else if (tabName === 'runs') loadRuns();
+        }        
+        // Load statistics
+        async function loadStatistics() {
+            try {
+                const response = await fetch('/api/statistics');
+                const stats = await response.json();
+                
+                document.getElementById('total-articles').textContent = stats.total_articles;
+                
+                // Calculate today's articles
+                const todayCount = Object.values(stats.articles_per_source).reduce((a, b) => a + b, 0);
+                document.getElementById('today-articles').textContent = todayCount;
+                
+                document.getElementById('total-sources').textContent = Object.keys(stats.articles_per_source).length;
+                
+                const keywordCount = Object.values(stats.keyword_counts).reduce((a, b) => a + b, 0);
+                document.getElementById('total-keywords').textContent = keywordCount;
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+            }
+        }
+        
+        // Load articles
+        async function loadArticles(search = '') {
+            try {
+                const params = new URLSearchParams({ search, per_page: 20 });
+                const response = await fetch(`/api/articles?${params}`);
+                const data = await response.json();
+                
+                const container = document.getElementById('articles-list');
+                if (data.articles.length === 0) {
+                    container.innerHTML = '<p>Geen artikelen gevonden.</p>';
+                    return;
+                }                
+                container.innerHTML = data.articles.map(article => {
+                    const keywords = article.keywords_found ? JSON.parse(article.keywords_found) : [];
+                    const date = new Date(article.scraped_at).toLocaleString('nl-NL');
+                    
+                    return `
+                        <div class="article-card">
+                            <h3 class="article-title">${article.title}</h3>
+                            <div class="article-meta">
+                                <span>📰 ${article.source_website}</span>
+                                <span>📅 ${date}</span>
+                                <span>🏷️ ${article.category || 'Algemeen'}</span>
+                            </div>
+                            ${keywords.length > 0 ? `
+                                <div style="margin-bottom: 10px;">
+                                    ${keywords.map(kw => `<span class="keyword-badge">${kw}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                            <p class="article-summary">${article.content_summary || 'Geen samenvatting beschikbaar.'}</p>
+                            <a href="${article.url}" target="_blank" class="article-link">Lees meer →</a>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading articles:', error);
+                document.getElementById('articles-list').innerHTML = '<p>Fout bij laden van artikelen.</p>';
+            }
+        }        
+        // Load keywords
+        async function loadKeywords() {
+            try {
+                const response = await fetch('/api/keywords');
+                const keywords = await response.json();
+                
+                const container = document.getElementById('keywords-list');
+                if (keywords.length === 0) {
+                    container.innerHTML = '<p>Geen keyword alerts gevonden.</p>';
+                    return;
+                }
+                
+                container.innerHTML = keywords.map(alert => `
+                    <div class="article-card">
+                        <span class="keyword-badge">${alert.keyword}</span>
+                        <h4 style="margin-top: 10px;">${alert.article_title}</h4>
+                        <p style="margin: 10px 0; font-style: italic;">"...${alert.context}..."</p>
+                        <a href="${alert.article_url}" target="_blank" class="article-link">Bekijk artikel →</a>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading keywords:', error);
+            }
+        }
+        
+        // Load scrape runs
+        async function loadRuns() {
+            try {
+                const response = await fetch('/api/scrape-runs');
+                const runs = await response.json();
+                
+                const container = document.getElementById('runs-list');
+                container.innerHTML = `
+                    <table style="width: 100%; background: white; border-radius: 8px; overflow: hidden;">
+                        <thead style="background: #f5f5f5;">
+                            <tr>
+                                <th style="padding: 15px; text-align: left;">Start tijd</th>
+                                <th style="padding: 15px; text-align: left;">Status</th>
+                                <th style="padding: 15px; text-align: left;">Nieuwe artikelen</th>
+                                <th style="padding: 15px; text-align: left;">Fouten</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${runs.map(run => `
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 15px;">${new Date(run.started_at).toLocaleString('nl-NL')}</td>
+                                    <td style="padding: 15px;">
+                                        <span style="color: ${run.status === 'completed' ? 'green' : 'orange'}">
+                                            ${run.status === 'completed' ? '✓' : '⏳'} ${run.status}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 15px;">${run.articles_new || 0}</td>
+                                    <td style="padding: 15px; color: ${run.errors_count > 0 ? 'red' : 'green'}">
+                                        ${run.errors_count || 0}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                console.error('Error loading runs:', error);
+            }
+        }
+        
+        // Mark all read
+        async function markAllRead() {
+            if (!confirm('Weet je zeker dat je alle artikelen als gelezen wilt markeren?')) return;
+            
+            try {
+                const response = await fetch('/api/mark-read', { method: 'POST' });
+                const result = await response.json();
+                alert(`${result.marked} artikelen gemarkeerd als gelezen.`);
+                loadStatistics();
+            } catch (error) {
+                console.error('Error marking read:', error);
+            }
+        }
+        
+        // Search functionality
+        let searchTimeout;
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                loadArticles(e.target.value);
+            }, 300);
+        });
+        
+        // Initial load
+        loadStatistics();
+        loadArticles();
+        
+        // Refresh stats every minute
+        setInterval(loadStatistics, 60000);
+    </script>
+</body>
+</html>

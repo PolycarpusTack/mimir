@@ -1,0 +1,118 @@
+# Git
+.git
+.gitignore
+.github/
+
+# Documentation
+*.md
+docs/
+*.txt
+!requirements*.txt
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+.tox/
+htmlcov/
+.cache
+.mypy_cache/
+.hypothesis/
+pytest.ini
+tox.ini
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.spyderproject
+.spyproject
+.ropeproject
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Configuration files with sensitive data
+config.local.json
+.env.local
+.env.production
+
+# Reports and analysis
+reports/
+analysis/
+*.html
+*.pdf
+comprehensive_code_analysis.json
+detailed_report.json
+quality_report.json
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Migration files (handled separately)
+migrations/versions/*.py
+!migrations/versions/__init__.py
+
+# Test data
+test_data/
+mock_data/
+
+# Build artifacts
+dist/
+build/

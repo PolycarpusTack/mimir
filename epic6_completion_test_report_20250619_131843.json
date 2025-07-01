@@ -1,0 +1,91 @@
+{
+  "test_execution": {
+    "timestamp": "2025-06-19T13:18:43.447978",
+    "total_execution_time": 1.168421745300293,
+    "overall_success": false,
+    "success_rate_percentage": 20.0
+  },
+  "epic6_completion_status": "FAILED",
+  "component_results": {
+    "clustering": {
+      "success": false,
+      "time": 0,
+      "details": {
+        "engine_loaded": false,
+        "error": "No module named 'numpy'",
+        "overall_success": false
+      }
+    },
+    "recommendations": {
+      "success": false,
+      "time": 0,
+      "details": {
+        "engine_loaded": false,
+        "error": "No module named 'numpy'",
+        "overall_success": false
+      }
+    },
+    "integration": {
+      "success": false,
+      "time": 0,
+      "details": {
+        "error": "No module named 'numpy'",
+        "overall_success": false
+      }
+    },
+    "performance": {
+      "success": true,
+      "time": 0.0211641788482666,
+      "details": {
+        "metrics": {
+          "clustering": {
+            "error": "No module named 'numpy'"
+          },
+          "recommendations": {
+            "error": "No module named 'numpy'"
+          }
+        },
+        "thresholds": {
+          "clustering": 30.0,
+          "recommendations": 5.0
+        },
+        "total_time": 0.0211641788482666,
+        "performance_passed": true,
+        "overall_success": true
+      }
+    },
+    "api_endpoints": {
+      "success": false,
+      "time": 1.0487706661224365,
+      "details": {
+        "clustering_router_loaded": true,
+        "recommendations_router_loaded": true,
+        "fastapi_integration": true,
+        "total_time": 1.0487706661224365,
+        "overall_success": false
+      }
+    }
+  },
+  "feature_coverage": {
+    "article_clustering": {
+      "topic_clustering": false,
+      "source_clustering": false,
+      "temporal_clustering": false,
+      "visualization": false
+    },
+    "recommendation_engine": {
+      "content_based": false,
+      "collaborative_filtering": false,
+      "hybrid_approach": false,
+      "feedback_loop": false
+    },
+    "system_integration": false,
+    "api_endpoints": false
+  },
+  "recommendations": [
+    "Fix clustering initialization: No module named 'numpy'",
+    "Fix recommendations initialization: No module named 'numpy'",
+    "Fix integration initialization: No module named 'numpy'",
+    "Investigate api_endpoints failures and improve reliability"
+  ]
+}

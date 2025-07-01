@@ -1,0 +1,364 @@
+# Prometheus Alert Rules for Mimir
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: mimir-monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: monitoring
+data:
+  mimir-application-alerts.yml: |
+    groups:
+    - name: mimir_application_alerts
+      interval: 30s
+      rules:
+      # High error rate
+      - alert: MimirAPIHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{app="mimir-api", status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{app="mimir-api"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+          team: backend
+        annotations:
+          summary: "High API error rate detected"
+          description: "API error rate is {{ $value | humanizePercentage }} for the last 5 minutes"
+          runbook_url: "https://wiki.example.com/runbooks/mimir-api-errors"
+      
+      # API latency
+      - alert: MimirAPIHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{app="mimir-api"}[5m])
+            )
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+          team: backend
+        annotations:
+          summary: "High API latency detected"
+          description: "95th percentile API latency is {{ $value }}s"
+      
+      # Worker queue buildup
+      - alert: MimirWorkerQueueBacklog
+        expr: |
+          sum(celery_queue_length{app="mimir-worker"}) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: worker
+          team: backend
+        annotations:
+          summary: "Worker queue backlog detected"
+          description: "{{ $value }} tasks in queue for more than 10 minutes"
+      
+      # Worker task failures
+      - alert: MimirWorkerHighFailureRate
+        expr: |
+          (
+            sum(rate(celery_tasks_failed_total{app="mimir-worker"}[5m]))
+            /
+            sum(rate(celery_tasks_total{app="mimir-worker"}[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: worker
+          team: backend
+        annotations:
+          summary: "High worker task failure rate"
+          description: "Worker task failure rate is {{ $value | humanizePercentage }}"
+      
+      # Scraping failures
+      - alert: MimirScrapingFailures
+        expr: |
+          (
+            sum(rate(mimir_scraper_errors_total[5m]))
+            /
+            sum(rate(mimir_scraper_attempts_total[5m]))
+          ) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+          component: scraper
+          team: data
+        annotations:
+          summary: "High scraping failure rate"
+          description: "Scraping failure rate is {{ $value | humanizePercentage }}"
+      
+      # Database connection pool exhaustion
+      - alert: MimirDatabaseConnectionPoolExhausted
+        expr: |
+          (
+            sum(pg_pool_connections_active)
+            /
+            sum(pg_pool_connections_total)
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          team: backend
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "{{ $value | humanizePercentage }} of database connections in use"
+      
+      # Cache hit rate low
+      - alert: MimirCacheHitRateLow
+        expr: |
+          mimir:cache_hit_ratio < 80
+        for: 15m
+        labels:
+          severity: warning
+          component: cache
+          team: backend
+        annotations:
+          summary: "Cache hit rate below threshold"
+          description: "Cache hit rate is {{ $value }}%"
+      
+      # Article processing latency
+      - alert: MimirArticleProcessingLatencyHigh
+        expr: |
+          mimir:article_processing_latency_p95 > 30
+        for: 10m
+        labels:
+          severity: warning
+          component: analytics
+          team: data
+        annotations:
+          summary: "Article processing taking too long"
+          description: "95th percentile processing time is {{ $value }}s"
+      
+      # No new articles scraped
+      - alert: MimirNoNewArticles
+        expr: |
+          sum(increase(mimir_articles_scraped_total[1h])) == 0
+        for: 2h
+        labels:
+          severity: warning
+          component: scraper
+          team: data
+        annotations:
+          summary: "No new articles scraped"
+          description: "No new articles have been scraped in the last 2 hours"
+    
+    - name: mimir_sla_alerts
+      interval: 30s
+      rules:
+      # Service availability SLA
+      - alert: MimirServiceAvailabilitySLA
+        expr: |
+          avg_over_time(up{app=~"mimir-.*"}[5m]) < 0.99
+        for: 5m
+        labels:
+          severity: critical
+          sla: availability
+          team: oncall
+        annotations:
+          summary: "Service availability below SLA"
+          description: "Service {{ $labels.app }} availability is {{ $value | humanizePercentage }}"
+      
+      # Response time SLA
+      - alert: MimirResponseTimeSLA
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (
+              rate(http_request_duration_seconds_bucket{app="mimir-api"}[5m])
+            )
+          ) > 2
+        for: 5m
+        labels:
+          severity: critical
+          sla: latency
+          team: oncall
+        annotations:
+          summary: "API response time exceeds SLA"
+          description: "99th percentile response time is {{ $value }}s (SLA: 2s)"
+  
+  infrastructure-alerts.yml: |
+    groups:
+    - name: infrastructure_alerts
+      interval: 30s
+      rules:
+      # Node down
+      - alert: KubernetesNodeDown
+        expr: |
+          up{job="kubernetes-nodes"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: infrastructure
+          team: platform
+        annotations:
+          summary: "Kubernetes node is down"
+          description: "Node {{ $labels.node }} has been down for more than 5 minutes"
+      
+      # High CPU usage
+      - alert: NodeHighCPUUsage
+        expr: |
+          (
+            100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+          ) > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+          team: platform
+        annotations:
+          summary: "High CPU usage on node"
+          description: "Node {{ $labels.instance }} CPU usage is {{ $value }}%"
+      
+      # High memory usage
+      - alert: NodeHighMemoryUsage
+        expr: |
+          (
+            (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+          ) > 85
+        for: 10m
+        labels:
+          severity: warning
+          component: infrastructure
+          team: platform
+        annotations:
+          summary: "High memory usage on node"
+          description: "Node {{ $labels.instance }} memory usage is {{ $value }}%"
+      
+      # Disk space low
+      - alert: NodeDiskSpaceLow
+        expr: |
+          (
+            (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs"} / node_filesystem_size_bytes) * 100
+          ) < 15
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+          team: platform
+        annotations:
+          summary: "Low disk space on node"
+          description: "Node {{ $labels.instance }} has {{ $value }}% disk space remaining on {{ $labels.device }}"
+      
+      # Pod crash looping
+      - alert: PodCrashLooping
+        expr: |
+          rate(kube_pod_container_status_restarts_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: kubernetes
+          team: platform
+        annotations:
+          summary: "Pod is crash looping"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+      
+      # PVC almost full
+      - alert: PersistentVolumeAlmostFull
+        expr: |
+          (
+            kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: storage
+          team: platform
+        annotations:
+          summary: "Persistent volume almost full"
+          description: "PVC {{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full"
+      
+      # Deployment replicas mismatch
+      - alert: DeploymentReplicasMismatch
+        expr: |
+          kube_deployment_spec_replicas != kube_deployment_status_replicas_available
+        for: 10m
+        labels:
+          severity: warning
+          component: kubernetes
+          team: platform
+        annotations:
+          summary: "Deployment replica mismatch"
+          description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} replicas available, expected {{ $labels.spec_replicas }}"
+    
+    - name: database_alerts
+      interval: 30s
+      rules:
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: |
+          pg_up == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+          team: data
+        annotations:
+          summary: "PostgreSQL instance is down"
+          description: "PostgreSQL instance {{ $labels.instance }} is down"
+      
+      # Replication lag
+      - alert: PostgreSQLReplicationLag
+        expr: |
+          pg_replication_lag > 60
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          team: data
+        annotations:
+          summary: "PostgreSQL replication lag high"
+          description: "Replication lag is {{ $value }}s on {{ $labels.instance }}"
+      
+      # Too many connections
+      - alert: PostgreSQLTooManyConnections
+        expr: |
+          (
+            sum(pg_stat_database_numbackends) 
+            / 
+            sum(pg_settings_max_connections)
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          team: data
+        annotations:
+          summary: "PostgreSQL has too many connections"
+          description: "{{ $value | humanizePercentage }} of max connections in use"
+      
+      # Redis down
+      - alert: RedisDown
+        expr: |
+          redis_up == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: cache
+          team: data
+        annotations:
+          summary: "Redis instance is down"
+          description: "Redis instance {{ $labels.instance }} is down"
+      
+      # Redis memory usage
+      - alert: RedisHighMemoryUsage
+        expr: |
+          (
+            redis_memory_used_bytes / redis_memory_max_bytes
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+          team: data
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"

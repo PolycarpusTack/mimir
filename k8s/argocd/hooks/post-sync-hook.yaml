@@ -1,0 +1,148 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mimir-post-sync-hook
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: post-sync
+        image: alpine/k8s:1.28.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "🔍 Starting post-sync validation..."
+          
+          # Wait for deployments to be ready
+          echo "Waiting for deployments to be ready..."
+          kubectl wait --for=condition=available --timeout=300s deployment/mimir-web -n $TARGET_NAMESPACE
+          kubectl wait --for=condition=available --timeout=300s deployment/mimir-api -n $TARGET_NAMESPACE
+          kubectl wait --for=condition=available --timeout=300s deployment/mimir-worker -n $TARGET_NAMESPACE
+          
+          # Health check endpoints
+          echo "Running health checks..."
+          
+          # Check web interface health
+          WEB_POD=$(kubectl get pods -n $TARGET_NAMESPACE -l app=mimir-web -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n $TARGET_NAMESPACE $WEB_POD -- curl -f http://localhost:5000/health || {
+            echo "❌ Web interface health check failed"
+            exit 1
+          }
+          
+          # Check API health
+          API_POD=$(kubectl get pods -n $TARGET_NAMESPACE -l app=mimir-api -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n $TARGET_NAMESPACE $API_POD -- curl -f http://localhost:8000/health || {
+            echo "❌ API health check failed"
+            exit 1
+          }
+          
+          # Check database connectivity
+          echo "Testing database connectivity..."
+          kubectl exec -n $TARGET_NAMESPACE $API_POD -- python -c "
+          import os
+          import psycopg2
+          try:
+              conn = psycopg2.connect(os.environ['DATABASE_URL'])
+              cursor = conn.cursor()
+              cursor.execute('SELECT 1')
+              print('✅ Database connectivity verified')
+              conn.close()
+          except Exception as e:
+              print(f'❌ Database connectivity failed: {e}')
+              exit(1)
+          "
+          
+          # Check Redis connectivity
+          echo "Testing Redis connectivity..."
+          kubectl exec -n $TARGET_NAMESPACE $API_POD -- python -c "
+          import os
+          import redis
+          try:
+              r = redis.from_url(os.environ['REDIS_URL'])
+              r.ping()
+              print('✅ Redis connectivity verified')
+          except Exception as e:
+              print(f'❌ Redis connectivity failed: {e}')
+              exit(1)
+          "
+          
+          # Run smoke tests
+          echo "Running smoke tests..."
+          
+          # Test article creation
+          kubectl exec -n $TARGET_NAMESPACE $API_POD -- python -c "
+          import requests
+          import json
+          
+          # Test article endpoint
+          response = requests.get('http://localhost:8000/api/articles?limit=1')
+          if response.status_code == 200:
+              print('✅ Articles API endpoint working')
+          else:
+              print(f'❌ Articles API endpoint failed: {response.status_code}')
+              exit(1)
+          
+          # Test health metrics
+          response = requests.get('http://localhost:8000/metrics')
+          if response.status_code == 200:
+              print('✅ Metrics endpoint working')
+          else:
+              print(f'❌ Metrics endpoint failed: {response.status_code}')
+              exit(1)
+          "
+          
+          # Check monitoring stack connectivity
+          if kubectl get service prometheus -n monitoring 2>/dev/null; then
+            echo "Testing Prometheus connectivity..."
+            kubectl exec -n $TARGET_NAMESPACE $API_POD -- curl -f http://prometheus.monitoring.svc.cluster.local:9090/api/v1/query?query=up || {
+              echo "⚠️  Prometheus connectivity check failed (non-critical)"
+            }
+          fi
+          
+          # Update deployment status
+          echo "Updating deployment annotations..."
+          kubectl annotate deployment mimir-web -n $TARGET_NAMESPACE \
+            deployment.mimir/last-sync="$(date -Iseconds)" \
+            deployment.mimir/sync-status="success" \
+            deployment.mimir/health-check="passed" \
+            --overwrite
+          
+          kubectl annotate deployment mimir-api -n $TARGET_NAMESPACE \
+            deployment.mimir/last-sync="$(date -Iseconds)" \
+            deployment.mimir/sync-status="success" \
+            deployment.mimir/health-check="passed" \
+            --overwrite
+          
+          # Send notification (if webhook URL is configured)
+          if [ -n "$WEBHOOK_URL" ]; then
+            echo "Sending deployment notification..."
+            curl -X POST "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"text\": \"✅ Mimir deployment to $TARGET_NAMESPACE completed successfully\",
+                \"namespace\": \"$TARGET_NAMESPACE\",
+                \"timestamp\": \"$(date -Iseconds)\",
+                \"status\": \"success\"
+              }" || echo "⚠️  Failed to send notification"
+          fi
+          
+          echo "✅ Post-sync validation completed successfully"
+          echo "🎉 Deployment to $TARGET_NAMESPACE is healthy and ready!"
+        env:
+        - name: TARGET_NAMESPACE
+          value: "mimir-production"
+        - name: WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: notification-config
+              key: webhook-url
+              optional: true
+      serviceAccountName: argocd-application-controller
+  backoffLimit: 2

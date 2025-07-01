@@ -1,0 +1,437 @@
+# Logstash Deployment for Log Processing
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: logstash
+    app.kubernetes.io/component: logging
+data:
+  logstash.yml: |
+    http.host: "0.0.0.0"
+    http.port: 9600
+    
+    # Pipeline settings
+    pipeline.workers: 4
+    pipeline.batch.size: 125
+    pipeline.batch.delay: 50
+    
+    # Queue settings
+    queue.type: persisted
+    queue.max_bytes: 1gb
+    queue.checkpoint.writes: 1024
+    
+    # Dead letter queue
+    dead_letter_queue.enable: true
+    dead_letter_queue.max_bytes: 1gb
+    
+    # Monitoring
+    monitoring.enabled: true
+    monitoring.elasticsearch.hosts: ["https://elasticsearch:9200"]
+    monitoring.elasticsearch.username: "logstash_system"
+    monitoring.elasticsearch.password: "${LOGSTASH_PASSWORD}"
+    monitoring.elasticsearch.ssl.verification_mode: none
+  
+  pipelines.yml: |
+    - pipeline.id: mimir-logs
+      path.config: "/usr/share/logstash/pipeline/mimir-logs.conf"
+      pipeline.workers: 2
+      pipeline.batch.size: 125
+    
+    - pipeline.id: kubernetes-logs
+      path.config: "/usr/share/logstash/pipeline/kubernetes.conf"
+      pipeline.workers: 1
+      pipeline.batch.size: 125
+  
+  mimir-logs.conf: |
+    input {
+      beats {
+        port => 5044
+        ssl => true
+        ssl_certificate => "/etc/logstash/certs/logstash.crt"
+        ssl_key => "/etc/logstash/certs/logstash.key"
+        ssl_verify_mode => "force_peer"
+        ssl_certificate_authorities => ["/etc/logstash/certs/ca.crt"]
+      }
+      
+      # Direct JSON logs from applications
+      tcp {
+        port => 5000
+        codec => json_lines
+      }
+      
+      # Syslog input
+      syslog {
+        port => 5514
+        type => "syslog"
+      }
+    }
+    
+    filter {
+      # Parse Mimir application logs
+      if [fields][app] == "mimir" {
+        json {
+          source => "message"
+          target => "mimir"
+        }
+        
+        # Extract important fields
+        mutate {
+          add_field => {
+            "[@metadata][index_name]" => "mimir-%{[fields][component]}-%{+YYYY.MM.dd}"
+            "environment" => "%{[fields][environment]}"
+            "component" => "%{[fields][component]}"
+            "pod_name" => "%{[kubernetes][pod][name]}"
+          }
+        }
+        
+        # Parse log level
+        if [mimir][level] {
+          mutate {
+            add_field => { "log_level" => "%{[mimir][level]}" }
+          }
+        }
+        
+        # Parse timestamps
+        date {
+          match => [ "[mimir][timestamp]", "ISO8601" ]
+          target => "@timestamp"
+        }
+        
+        # Extract request ID for tracing
+        if [mimir][request_id] {
+          mutate {
+            add_field => { "trace_id" => "%{[mimir][request_id]}" }
+          }
+        }
+        
+        # Parse stack traces
+        if [mimir][stack_trace] {
+          mutate {
+            add_field => { "error_type" => "%{[mimir][error_type]}" }
+          }
+        }
+      }
+      
+      # Add GeoIP information for API requests
+      if [mimir][client_ip] {
+        geoip {
+          source => "[mimir][client_ip]"
+          target => "geoip"
+        }
+      }
+      
+      # Calculate response time
+      if [mimir][response_time_ms] {
+        ruby {
+          code => "event.set('response_time_seconds', event.get('[mimir][response_time_ms]').to_f / 1000)"
+        }
+      }
+      
+      # Remove sensitive data
+      mutate {
+        remove_field => [ "[mimir][password]", "[mimir][api_key]", "[mimir][token]" ]
+      }
+    }
+    
+    output {
+      # Send to Elasticsearch
+      elasticsearch {
+        hosts => ["https://elasticsearch:9200"]
+        ssl => true
+        ssl_certificate_verification => false
+        user => "elastic"
+        password => "${ELASTIC_PASSWORD}"
+        
+        index => "%{[@metadata][index_name]}"
+        template_name => "mimir-logs"
+        template => "/usr/share/logstash/templates/mimir-template.json"
+        template_overwrite => true
+        
+        # Enable DLQ for failed events
+        dlq_custom_codes => [400, 404]
+      }
+      
+      # Send metrics to monitoring
+      if [mimir][metric_name] {
+        statsd {
+          host => "statsd"
+          port => 8125
+          namespace => "mimir"
+          gauge => {
+            "%{[mimir][metric_name]}" => "%{[mimir][metric_value]}"
+          }
+        }
+      }
+      
+      # Debug output
+      if [@metadata][debug] {
+        stdout {
+          codec => rubydebug
+        }
+      }
+    }
+  
+  kubernetes.conf: |
+    input {
+      beats {
+        port => 5045
+        type => "kubernetes"
+      }
+    }
+    
+    filter {
+      # Parse Kubernetes metadata
+      kubernetes {
+        source => "message"
+        target => "kubernetes"
+      }
+      
+      # Parse container logs
+      if [kubernetes][container][name] {
+        mutate {
+          add_field => {
+            "[@metadata][index_name]" => "kubernetes-%{[kubernetes][namespace]}-%{+YYYY.MM.dd}"
+          }
+        }
+      }
+      
+      # Parse JSON logs if present
+      if [message] =~ /^\{/ {
+        json {
+          source => "message"
+          target => "log"
+          skip_on_invalid_json => true
+        }
+      }
+    }
+    
+    output {
+      elasticsearch {
+        hosts => ["https://elasticsearch:9200"]
+        ssl => true
+        ssl_certificate_verification => false
+        user => "elastic"
+        password => "${ELASTIC_PASSWORD}"
+        index => "%{[@metadata][index_name]}"
+      }
+    }
+  
+  mimir-template.json: |
+    {
+      "index_patterns": ["mimir-*"],
+      "settings": {
+        "number_of_shards": 3,
+        "number_of_replicas": 1,
+        "index.lifecycle.name": "mimir-ilm-policy",
+        "index.lifecycle.rollover_alias": "mimir-logs"
+      },
+      "mappings": {
+        "properties": {
+          "@timestamp": { "type": "date" },
+          "component": { "type": "keyword" },
+          "environment": { "type": "keyword" },
+          "log_level": { "type": "keyword" },
+          "pod_name": { "type": "keyword" },
+          "trace_id": { "type": "keyword" },
+          "message": { "type": "text" },
+          "error_type": { "type": "keyword" },
+          "response_time_seconds": { "type": "float" },
+          "geoip": {
+            "properties": {
+              "location": { "type": "geo_point" },
+              "country_name": { "type": "keyword" },
+              "city_name": { "type": "keyword" }
+            }
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: logstash-credentials
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: logstash
+    app.kubernetes.io/component: logging
+type: Opaque
+stringData:
+  ELASTIC_PASSWORD: "CHANGE_THIS_STRONG_PASSWORD"
+  LOGSTASH_PASSWORD: "CHANGE_THIS_LOGSTASH_PASSWORD"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: logstash
+    app.kubernetes.io/component: logging
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: logstash
+      app.kubernetes.io/component: logging
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: logstash
+        app.kubernetes.io/component: logging
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9198"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: logstash
+        image: docker.elastic.co/logstash/logstash:8.10.2
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: LS_JAVA_OPTS
+          value: "-Xmx1g -Xms1g"
+        envFrom:
+        - secretRef:
+            name: logstash-credentials
+        ports:
+        - containerPort: 5044
+          name: beats
+          protocol: TCP
+        - containerPort: 5045
+          name: beats-k8s
+          protocol: TCP
+        - containerPort: 5000
+          name: tcp-json
+          protocol: TCP
+        - containerPort: 5514
+          name: syslog
+          protocol: TCP
+        - containerPort: 9600
+          name: api
+          protocol: TCP
+        resources:
+          requests:
+            memory: "1.5Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: api
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: api
+          initialDelaySeconds: 90
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/logstash/config/logstash.yml
+          subPath: logstash.yml
+          readOnly: true
+        - name: config
+          mountPath: /usr/share/logstash/config/pipelines.yml
+          subPath: pipelines.yml
+          readOnly: true
+        - name: pipeline
+          mountPath: /usr/share/logstash/pipeline
+          readOnly: true
+        - name: templates
+          mountPath: /usr/share/logstash/templates
+          readOnly: true
+        - name: data
+          mountPath: /usr/share/logstash/data
+        - name: certs
+          mountPath: /etc/logstash/certs
+          readOnly: true
+      - name: logstash-exporter
+        image: alxrem/prometheus-logstash-exporter:latest
+        imagePullPolicy: IfNotPresent
+        args:
+        - --logstash.endpoint=http://localhost:9600
+        ports:
+        - containerPort: 9198
+          name: metrics
+          protocol: TCP
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: config
+        configMap:
+          name: logstash-config
+      - name: pipeline
+        configMap:
+          name: logstash-config
+          items:
+          - key: mimir-logs.conf
+            path: mimir-logs.conf
+          - key: kubernetes.conf
+            path: kubernetes.conf
+      - name: templates
+        configMap:
+          name: logstash-config
+          items:
+          - key: mimir-template.json
+            path: mimir-template.json
+      - name: data
+        emptyDir: {}
+      - name: certs
+        secret:
+          secretName: logstash-certs
+          optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash
+  namespace: mimir-logging
+  labels:
+    app.kubernetes.io/name: logstash
+    app.kubernetes.io/component: logging
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5044
+    targetPort: beats
+    protocol: TCP
+    name: beats
+  - port: 5045
+    targetPort: beats-k8s
+    protocol: TCP
+    name: beats-k8s
+  - port: 5000
+    targetPort: tcp-json
+    protocol: TCP
+    name: tcp-json
+  - port: 5514
+    targetPort: syslog
+    protocol: TCP
+    name: syslog
+  - port: 9600
+    targetPort: api
+    protocol: TCP
+    name: api
+  selector:
+    app.kubernetes.io/name: logstash
+    app.kubernetes.io/component: logging

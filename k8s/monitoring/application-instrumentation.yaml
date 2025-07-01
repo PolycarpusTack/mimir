@@ -1,0 +1,328 @@
+# Application Instrumentation Configuration
+# Provides guidelines and examples for instrumenting Mimir applications
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-instrumentation-guide
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: monitoring
+data:
+  python-instrumentation.py: |
+    """
+    Prometheus instrumentation for Mimir Python applications
+    """
+    from prometheus_client import Counter, Histogram, Gauge, Summary
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    from functools import wraps
+    import time
+    
+    # Request metrics
+    http_requests_total = Counter(
+        'http_requests_total',
+        'Total HTTP requests',
+        ['method', 'endpoint', 'status']
+    )
+    
+    http_request_duration_seconds = Histogram(
+        'http_request_duration_seconds',
+        'HTTP request latency',
+        ['method', 'endpoint'],
+        buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10)
+    )
+    
+    # Scraping metrics
+    scraper_attempts_total = Counter(
+        'mimir_scraper_attempts_total',
+        'Total scraping attempts',
+        ['source', 'type']
+    )
+    
+    scraper_success_total = Counter(
+        'mimir_scraper_success_total',
+        'Successful scraping attempts',
+        ['source', 'type']
+    )
+    
+    scraper_errors_total = Counter(
+        'mimir_scraper_errors_total',
+        'Failed scraping attempts',
+        ['source', 'type', 'error_type']
+    )
+    
+    articles_scraped_total = Counter(
+        'mimir_articles_scraped_total',
+        'Total articles scraped',
+        ['source', 'category']
+    )
+    
+    articles_total = Gauge(
+        'mimir_articles_total',
+        'Total articles in database'
+    )
+    
+    # Processing metrics
+    article_processing_duration_seconds = Histogram(
+        'mimir_article_processing_duration_seconds',
+        'Time to process an article',
+        buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60)
+    )
+    
+    # Worker metrics
+    celery_tasks_total = Counter(
+        'celery_tasks_total',
+        'Total Celery tasks',
+        ['task_type', 'status']
+    )
+    
+    celery_tasks_failed_total = Counter(
+        'celery_tasks_failed_total',
+        'Failed Celery tasks',
+        ['task_type']
+    )
+    
+    celery_queue_length = Gauge(
+        'celery_queue_length',
+        'Current Celery queue length',
+        ['queue_name']
+    )
+    
+    # Database metrics
+    pg_pool_connections_active = Gauge(
+        'pg_pool_connections_active',
+        'Active database connections'
+    )
+    
+    pg_pool_connections_idle = Gauge(
+        'pg_pool_connections_idle',
+        'Idle database connections'
+    )
+    
+    pg_pool_connections_total = Gauge(
+        'pg_pool_connections_total',
+        'Total database connections'
+    )
+    
+    # Analytics metrics
+    sentiment_analysis_total = Counter(
+        'mimir_sentiment_analysis_total',
+        'Sentiment analysis results',
+        ['sentiment']
+    )
+    
+    entities_extracted_total = Counter(
+        'mimir_entities_extracted_total',
+        'Named entities extracted',
+        ['entity_type']
+    )
+    
+    entity_extraction_duration_seconds = Histogram(
+        'mimir_entity_extraction_duration_seconds',
+        'Time to extract entities',
+        buckets=(0.01, 0.05, 0.1, 0.5, 1, 2, 5)
+    )
+    
+    keyword_frequency_total = Counter(
+        'mimir_keyword_frequency_total',
+        'Keyword occurrence frequency',
+        ['keyword']
+    )
+    
+    ml_predictions_total = Counter(
+        'mimir_ml_predictions_total',
+        'ML model predictions',
+        ['model', 'prediction_type']
+    )
+    
+    analytics_queue_length = Gauge(
+        'mimir_analytics_queue_length',
+        'Analytics processing queue length'
+    )
+    
+    analytics_processed_total = Counter(
+        'mimir_analytics_processed_total',
+        'Total analytics tasks processed'
+    )
+    
+    # Decorators for easy instrumentation
+    def track_request_metrics(func):
+        """Decorator to track HTTP request metrics"""
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                status = getattr(result, 'status_code', 200)
+                return result
+            except Exception as e:
+                status = 500
+                raise
+            finally:
+                duration = time.time() - start_time
+                method = kwargs.get('method', 'GET')
+                endpoint = kwargs.get('endpoint', func.__name__)
+                
+                http_requests_total.labels(
+                    method=method,
+                    endpoint=endpoint,
+                    status=status
+                ).inc()
+                
+                http_request_duration_seconds.labels(
+                    method=method,
+                    endpoint=endpoint
+                ).observe(duration)
+        
+        return wrapper
+    
+    def track_scraping_metrics(source, scrape_type):
+        """Decorator to track scraping metrics"""
+        def decorator(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                scraper_attempts_total.labels(
+                    source=source,
+                    type=scrape_type
+                ).inc()
+                
+                try:
+                    result = func(*args, **kwargs)
+                    scraper_success_total.labels(
+                        source=source,
+                        type=scrape_type
+                    ).inc()
+                    
+                    # Count articles if result is a list
+                    if isinstance(result, list):
+                        articles_scraped_total.labels(
+                            source=source,
+                            category=kwargs.get('category', 'general')
+                        ).inc(len(result))
+                    
+                    return result
+                except Exception as e:
+                    error_type = type(e).__name__
+                    scraper_errors_total.labels(
+                        source=source,
+                        type=scrape_type,
+                        error_type=error_type
+                    ).inc()
+                    raise
+            
+            return wrapper
+        return decorator
+    
+    def track_processing_time(func):
+        """Decorator to track article processing time"""
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with article_processing_duration_seconds.time():
+                return func(*args, **kwargs)
+        return wrapper
+    
+    # Metrics endpoint handler
+    def metrics_handler(request):
+        """Handler for /metrics endpoint"""
+        return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+  
+  deployment-annotations.yaml: |
+    # Add these annotations to your Kubernetes deployments
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: mimir-api
+    spec:
+      template:
+        metadata:
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "8000"
+            prometheus.io/path: "/metrics"
+  
+  fastapi-example.py: |
+    """
+    FastAPI instrumentation example
+    """
+    from fastapi import FastAPI, Request
+    from prometheus_client import make_asgi_app
+    import time
+    
+    app = FastAPI()
+    
+    # Add prometheus metrics endpoint
+    metrics_app = make_asgi_app()
+    app.mount("/metrics", metrics_app)
+    
+    # Middleware for automatic request tracking
+    @app.middleware("http")
+    async def track_requests(request: Request, call_next):
+        start_time = time.time()
+        
+        response = await call_next(request)
+        
+        duration = time.time() - start_time
+        
+        http_requests_total.labels(
+            method=request.method,
+            endpoint=request.url.path,
+            status=response.status_code
+        ).inc()
+        
+        http_request_duration_seconds.labels(
+            method=request.method,
+            endpoint=request.url.path
+        ).observe(duration)
+        
+        return response
+  
+  celery-instrumentation.py: |
+    """
+    Celery task instrumentation
+    """
+    from celery import Task
+    from celery.signals import task_prerun, task_postrun, task_failure
+    import time
+    
+    class InstrumentedTask(Task):
+        """Base task with Prometheus instrumentation"""
+        
+        def __call__(self, *args, **kwargs):
+            start_time = time.time()
+            task_type = self.name
+            
+            try:
+                result = super().__call__(*args, **kwargs)
+                
+                celery_tasks_total.labels(
+                    task_type=task_type,
+                    status='success'
+                ).inc()
+                
+                return result
+            except Exception as e:
+                celery_tasks_total.labels(
+                    task_type=task_type,
+                    status='failure'
+                ).inc()
+                
+                celery_tasks_failed_total.labels(
+                    task_type=task_type
+                ).inc()
+                
+                raise
+    
+    # Signal handlers for queue monitoring
+    @task_prerun.connect
+    def update_queue_length(sender=None, **kwargs):
+        """Update queue length metrics"""
+        from kombu import Connection
+        
+        with Connection(app.conf.broker_url) as conn:
+            with conn.channel() as channel:
+                for queue_name in ['celery', 'analytics', 'scraping']:
+                    queue = channel.queue_declare(queue_name, passive=True)
+                    celery_queue_length.labels(
+                        queue_name=queue_name
+                    ).set(queue.message_count)

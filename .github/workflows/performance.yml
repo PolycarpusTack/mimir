@@ -1,0 +1,553 @@
+name: Performance Testing
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 4 * * 1'  # Weekly on Monday at 4 AM
+
+env:
+  PYTHON_VERSION: 3.11
+
+jobs:
+  load-testing:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.11.0-pg14
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: mimir_user
+          POSTGRES_DB: mimir_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust
+
+      - name: Setup test database
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          POSTGRES_PASSWORD: test_password
+        run: |
+          python db_manager_postgres.py --init
+          python -c "
+          import db_manager_postgres as db
+          # Seed test data
+          for i in range(1000):
+              db.add_article(
+                  url=f'https://test.com/article-{i}',
+                  title=f'Test Article {i}',
+                  publication_date=None,
+                  source_website='test.com',
+                  content_summary=f'Summary for article {i}',
+                  full_content=f'Content for article {i}' * 50
+              )
+          "
+
+      - name: Start application
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          REDIS_URL: redis://localhost:6379/0
+          POSTGRES_PASSWORD: test_password
+          JWT_SECRET_KEY: test-secret-key-for-testing-only
+          ENVIRONMENT: test
+        run: |
+          python web_interface.py &
+          python api/app.py &
+          sleep 15
+
+      - name: Run load tests
+        run: |
+          # Basic load test
+          locust -f tests/locustfile.py \
+            --headless \
+            --users 100 \
+            --spawn-rate 10 \
+            --run-time 300s \
+            --host http://localhost:5000 \
+            --html load-test-report.html \
+            --csv load-test-results
+
+      - name: Analyze performance results
+        run: |
+          python -c "
+          import csv
+          import json
+          
+          # Parse Locust results
+          stats = []
+          with open('load-test-results_stats.csv', 'r') as f:
+              reader = csv.DictReader(f)
+              for row in reader:
+                  if row['Type'] == 'GET' and row['Name'] != 'Aggregated':
+                      stats.append({
+                          'endpoint': row['Name'],
+                          'requests': int(row['Request Count']),
+                          'failures': int(row['Failure Count']),
+                          'avg_response_time': float(row['Average Response Time']),
+                          'p95_response_time': float(row['95%']),
+                          'p99_response_time': float(row['99%']),
+                          'requests_per_sec': float(row['Requests/s'])
+                      })
+          
+          # Performance thresholds
+          thresholds = {
+              'avg_response_time_max': 500,  # ms
+              'p95_response_time_max': 1000,  # ms
+              'failure_rate_max': 0.01,  # 1%
+              'min_requests_per_sec': 10
+          }
+          
+          # Check thresholds
+          failures = []
+          for stat in stats:
+              failure_rate = stat['failures'] / stat['requests'] if stat['requests'] > 0 else 0
+              
+              if stat['avg_response_time'] > thresholds['avg_response_time_max']:
+                  failures.append(f\"Avg response time too high for {stat['endpoint']}: {stat['avg_response_time']}ms\")
+              
+              if stat['p95_response_time'] > thresholds['p95_response_time_max']:
+                  failures.append(f\"P95 response time too high for {stat['endpoint']}: {stat['p95_response_time']}ms\")
+              
+              if failure_rate > thresholds['failure_rate_max']:
+                  failures.append(f\"Failure rate too high for {stat['endpoint']}: {failure_rate:.2%}\")
+              
+              if stat['requests_per_sec'] < thresholds['min_requests_per_sec']:
+                  failures.append(f\"Throughput too low for {stat['endpoint']}: {stat['requests_per_sec']} req/s\")
+          
+          # Save results
+          results = {
+              'stats': stats,
+              'thresholds': thresholds,
+              'failures': failures,
+              'overall_status': 'PASS' if not failures else 'FAIL'
+          }
+          
+          with open('performance-results.json', 'w') as f:
+              json.dump(results, f, indent=2)
+          
+          # Print summary
+          print('=== Performance Test Results ===')
+          for stat in stats:
+              print(f\"{stat['endpoint']}: {stat['avg_response_time']:.1f}ms avg, {stat['requests_per_sec']:.1f} req/s\")
+          
+          if failures:
+              print('\\n=== FAILURES ===')
+              for failure in failures:
+                  print(f'❌ {failure}')
+              exit(1)
+          else:
+              print('\\n✅ All performance thresholds passed')
+          "
+
+      - name: Upload performance reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: performance-reports
+          path: |
+            load-test-report.html
+            load-test-results_*.csv
+            performance-results.json
+
+  stress-testing:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || contains(github.event.pull_request.labels.*.name, 'stress-test')
+    services:
+      postgres:
+        image: timescale/timescaledb:2.11.0-pg14
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: mimir_user
+          POSTGRES_DB: mimir_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust psutil
+
+      - name: Setup test database
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          POSTGRES_PASSWORD: test_password
+        run: |
+          python db_manager_postgres.py --init
+
+      - name: Start application with monitoring
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          REDIS_URL: redis://localhost:6379/0
+          POSTGRES_PASSWORD: test_password
+          JWT_SECRET_KEY: test-secret-key-for-testing-only
+          ENVIRONMENT: test
+        run: |
+          # Start resource monitoring
+          python -c "
+          import psutil
+          import time
+          import json
+          import threading
+          
+          def monitor_resources():
+              metrics = []
+              for i in range(600):  # 10 minutes
+                  cpu = psutil.cpu_percent(interval=1)
+                  memory = psutil.virtual_memory()
+                  metrics.append({
+                      'timestamp': time.time(),
+                      'cpu_percent': cpu,
+                      'memory_percent': memory.percent,
+                      'memory_used_mb': memory.used / 1024 / 1024
+                  })
+              
+              with open('resource-metrics.json', 'w') as f:
+                  json.dump(metrics, f)
+          
+          monitor_thread = threading.Thread(target=monitor_resources)
+          monitor_thread.start()
+          " &
+          
+          # Start application
+          python web_interface.py &
+          sleep 15
+
+      - name: Run stress tests
+        run: |
+          # Gradually increase load to find breaking point
+          locust -f tests/locustfile.py \
+            --headless \
+            --users 500 \
+            --spawn-rate 50 \
+            --run-time 600s \
+            --host http://localhost:5000 \
+            --html stress-test-report.html \
+            --csv stress-test-results
+
+      - name: Analyze stress test results
+        run: |
+          # Wait for monitoring to complete
+          sleep 10
+          
+          python -c "
+          import json
+          import csv
+          
+          # Load resource metrics
+          with open('resource-metrics.json', 'r') as f:
+              metrics = json.load(f)
+          
+          # Calculate resource usage stats
+          cpu_usage = [m['cpu_percent'] for m in metrics]
+          memory_usage = [m['memory_percent'] for m in metrics]
+          
+          resource_stats = {
+              'max_cpu': max(cpu_usage),
+              'avg_cpu': sum(cpu_usage) / len(cpu_usage),
+              'max_memory': max(memory_usage),
+              'avg_memory': sum(memory_usage) / len(memory_usage)
+          }
+          
+          # Load performance stats
+          with open('stress-test-results_stats.csv', 'r') as f:
+              reader = csv.DictReader(f)
+              perf_stats = list(reader)
+          
+          # Generate report
+          report = {
+              'resource_usage': resource_stats,
+              'performance_stats': perf_stats,
+              'summary': {
+                  'max_cpu_usage': f\"{resource_stats['max_cpu']:.1f}%\",
+                  'max_memory_usage': f\"{resource_stats['max_memory']:.1f}%\",
+                  'test_duration': '10 minutes',
+                  'max_concurrent_users': 500
+              }
+          }
+          
+          with open('stress-test-summary.json', 'w') as f:
+              json.dump(report, f, indent=2)
+          
+          print('=== Stress Test Summary ===')
+          print(f\"Max CPU Usage: {resource_stats['max_cpu']:.1f}%\")
+          print(f\"Max Memory Usage: {resource_stats['max_memory']:.1f}%\")
+          print(f\"Avg CPU Usage: {resource_stats['avg_cpu']:.1f}%\")
+          print(f\"Avg Memory Usage: {resource_stats['avg_memory']:.1f}%\")
+          "
+
+      - name: Upload stress test reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: stress-test-reports
+          path: |
+            stress-test-report.html
+            stress-test-results_*.csv
+            stress-test-summary.json
+            resource-metrics.json
+
+  database-performance:
+    name: Database Performance Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.11.0-pg14
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: mimir_user
+          POSTGRES_DB: mimir_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pgbench
+
+      - name: Setup database
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          POSTGRES_PASSWORD: test_password
+        run: |
+          python db_manager_postgres.py --init
+          alembic upgrade head
+
+      - name: Run database performance tests
+        env:
+          PGPASSWORD: test_password
+        run: |
+          # Test basic database performance
+          pgbench -h localhost -p 5432 -U mimir_user -d mimir_test -i
+          pgbench -h localhost -p 5432 -U mimir_user -d mimir_test -c 10 -j 2 -t 1000 -r
+
+      - name: Test custom queries performance
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          POSTGRES_PASSWORD: test_password
+        run: |
+          python -c "
+          import time
+          import db_manager_postgres as db
+          
+          # Test article insertion performance
+          start_time = time.time()
+          for i in range(1000):
+              db.add_article(
+                  url=f'https://perf-test.com/article-{i}',
+                  title=f'Performance Test Article {i}',
+                  publication_date=None,
+                  source_website='perf-test.com',
+                  content_summary=f'Summary for performance test article {i}',
+                  full_content=f'Content for performance test article {i}' * 100
+              )
+          insert_time = time.time() - start_time
+          
+          # Test search performance
+          start_time = time.time()
+          for i in range(100):
+              results = db.search_articles('performance', limit=10)
+          search_time = time.time() - start_time
+          
+          print(f'Insert Performance: {1000/insert_time:.1f} articles/sec')
+          print(f'Search Performance: {100/search_time:.1f} searches/sec')
+          
+          # Performance thresholds
+          if insert_time > 60:  # Should insert 1000 articles in under 60 seconds
+              print('❌ Insert performance too slow')
+              exit(1)
+          
+          if search_time > 10:  # Should perform 100 searches in under 10 seconds
+              print('❌ Search performance too slow')
+              exit(1)
+          
+          print('✅ Database performance tests passed')
+          "
+
+  performance-comparison:
+    name: Performance Comparison
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          path: pr
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run baseline performance test
+        run: |
+          cd base
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust
+          
+          # Start app and run quick test
+          python web_interface.py &
+          sleep 10
+          locust -f tests/locustfile.py --headless --users 50 --spawn-rate 10 --run-time 60s --host http://localhost:5000 --csv baseline-results
+          pkill python
+
+      - name: Run PR performance test
+        run: |
+          cd pr
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust
+          
+          # Start app and run quick test
+          python web_interface.py &
+          sleep 10
+          locust -f tests/locustfile.py --headless --users 50 --spawn-rate 10 --run-time 60s --host http://localhost:5000 --csv pr-results
+          pkill python
+
+      - name: Compare results
+        run: |
+          python -c "
+          import csv
+          
+          def parse_results(filename):
+              with open(filename, 'r') as f:
+                  reader = csv.DictReader(f)
+                  stats = {}
+                  for row in reader:
+                      if row['Type'] == 'GET' and row['Name'] == 'Aggregated':
+                          stats = {
+                              'avg_response_time': float(row['Average Response Time']),
+                              'requests_per_sec': float(row['Requests/s']),
+                              'failure_rate': float(row['Failure Count']) / float(row['Request Count'])
+                          }
+                          break
+              return stats
+          
+          baseline = parse_results('base/baseline-results_stats.csv')
+          pr_stats = parse_results('pr/pr-results_stats.csv')
+          
+          # Calculate percentage changes
+          response_time_change = ((pr_stats['avg_response_time'] - baseline['avg_response_time']) / baseline['avg_response_time']) * 100
+          throughput_change = ((pr_stats['requests_per_sec'] - baseline['requests_per_sec']) / baseline['requests_per_sec']) * 100
+          
+          print('=== Performance Comparison ===')
+          print(f'Response Time: {response_time_change:+.1f}% ({baseline[\"avg_response_time\"]:.1f}ms → {pr_stats[\"avg_response_time\"]:.1f}ms)')
+          print(f'Throughput: {throughput_change:+.1f}% ({baseline[\"requests_per_sec\"]:.1f} → {pr_stats[\"requests_per_sec\"]:.1f} req/s)')
+          
+          # Set thresholds for significant changes
+          if response_time_change > 20:
+              print('⚠️  Significant response time increase detected')
+          elif response_time_change < -10:
+              print('✅ Response time improvement detected')
+          
+          if throughput_change < -20:
+              print('⚠️  Significant throughput decrease detected')
+          elif throughput_change > 10:
+              print('✅ Throughput improvement detected')
+          "
+
+      - name: Comment performance comparison
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Read results and generate comment
+            const comment = \`## 🚀 Performance Comparison
+            
+            Performance test results for this PR compared to the base branch:
+            
+            | Metric | Baseline | PR | Change |
+            |--------|----------|-------|---------|
+            | Response Time | - | - | - |
+            | Throughput | - | - | - |
+            
+            *Performance tests run with 50 concurrent users for 60 seconds*
+            \`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

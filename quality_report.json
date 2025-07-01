@@ -1,0 +1,138 @@
+{
+  "timestamp": "2025-06-18 12:35:36.520698",
+  "report": {
+    "metrics": {
+      "files_analyzed": 4,
+      "total_lines": 1353,
+      "code_lines": 1057,
+      "comment_lines": 86,
+      "docstring_coverage": 0,
+      "type_hint_coverage": 0,
+      "complexity_scores": [
+        7,
+        4,
+        4,
+        1,
+        1,
+        8,
+        3,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        2,
+        3,
+        2,
+        2,
+        2,
+        2,
+        36,
+        1,
+        1,
+        2,
+        2,
+        4,
+        4,
+        9,
+        5,
+        8,
+        4,
+        2,
+        4,
+        2,
+        6,
+        1,
+        1,
+        1,
+        5,
+        1,
+        2,
+        1,
+        2,
+        5,
+        4,
+        4,
+        2,
+        4
+      ],
+      "comment_ratio": 0.08136234626300852,
+      "avg_complexity": 3.3846153846153846
+    },
+    "issues": {
+      "critical": [
+        "Potential SQL injection vulnerability in migrate_to_postgres.py"
+      ],
+      "high": [
+        "High complexity (36): migrate_to_postgres.py:31 - MimirMigration",
+        "No data validation in migration script",
+        "No rollback mechanism in migration script"
+      ],
+      "medium": [
+        "Missing docstring: db_manager_postgres.py:47 - __new__",
+        "Missing docstring: db_manager_postgres.py:222 - _add_alert",
+        "Missing docstring: migrate_to_postgres.py:34 - __init__",
+        "Bare except clause found in migrate_to_postgres.py",
+        "Bare except clause found in db_adapter.py"
+      ],
+      "low": [
+        "Missing return type hint: db_manager_postgres.py:87 - get_db_connection",
+        "Missing return type hint: db_manager_postgres.py:104 - init_db",
+        "Missing parameter type hint: db_manager_postgres.py:220 - add_keyword_alert(conn)",
+        "Missing return type hint: db_manager_postgres.py:47 - __new__",
+        "Missing parameter type hint: db_manager_postgres.py:47 - __new__(cls)",
+        "Missing return type hint: db_manager_postgres.py:52 - initialize",
+        "Missing return type hint: db_manager_postgres.py:66 - get_connection",
+        "Missing return type hint: db_manager_postgres.py:72 - return_connection",
+        "Missing parameter type hint: db_manager_postgres.py:72 - return_connection(connection)",
+        "Missing return type hint: db_manager_postgres.py:77 - close_all",
+        "Missing return type hint: db_manager_postgres.py:222 - _add_alert",
+        "Missing parameter type hint: db_manager_postgres.py:222 - _add_alert(connection)",
+        "Missing return type hint: migrate_to_postgres.py:452 - main",
+        "Missing return type hint: test_postgres_migration.py:17 - test_postgres_connection",
+        "Missing return type hint: test_postgres_migration.py:34 - test_full_text_search",
+        "Missing return type hint: test_postgres_migration.py:73 - test_source_management",
+        "Missing return type hint: test_postgres_migration.py:96 - test_performance",
+        "Missing return type hint: test_postgres_migration.py:141 - test_adapter_compatibility",
+        "Missing return type hint: test_postgres_migration.py:166 - main",
+        "No index creation or usage hints found"
+      ]
+    },
+    "issue_counts": {
+      "critical": 1,
+      "high": 3,
+      "medium": 5,
+      "low": 20
+    },
+    "technical_debt_score": 90,
+    "quality_grade": "F"
+  },
+  "test_coverage": {
+    "coverage": 61.904761904761905,
+    "total_functions": 21,
+    "tested_functions": 13,
+    "missing_tests": [
+      "end_scrape_run",
+      "add_keyword_alert",
+      "get_articles_by_keyword",
+      "log_scrape_error",
+      "get_active_sources",
+      "start_scrape_run",
+      "close_all",
+      "mark_articles_as_read"
+    ]
+  },
+  "documentation": {
+    "missing_docs": [],
+    "outdated_docs": [
+      "README.md"
+    ],
+    "documentation_complete": false
+  }
+}

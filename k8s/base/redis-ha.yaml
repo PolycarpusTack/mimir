@@ -1,0 +1,556 @@
+# Redis High Availability with Sentinel
+# Master-Slave setup with automatic failover using Redis Sentinel
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-ha-config
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: mimir
+data:
+  redis.conf: |
+    # Redis Master/Slave Configuration
+    bind 0.0.0.0
+    protected-mode yes
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+    
+    # General
+    daemonize no
+    supervised no
+    pidfile /var/run/redis_6379.pid
+    loglevel notice
+    logfile ""
+    databases 16
+    
+    # Authentication
+    masterauth ${REDIS_PASSWORD}
+    requirepass ${REDIS_PASSWORD}
+    
+    # Persistence
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    
+    # Replication
+    replica-serve-stale-data yes
+    replica-read-only yes
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+    repl-ping-replica-period 10
+    repl-timeout 60
+    repl-disable-tcp-nodelay no
+    repl-backlog-size 10mb
+    repl-backlog-ttl 3600
+    
+    # Memory Management
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+    maxmemory-samples 5
+    
+    # Append Only File
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    aof-load-truncated yes
+    aof-use-rdb-preamble yes
+    
+    # Slow Log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    
+    # Latency Monitor
+    latency-monitor-threshold 0
+    
+    # Event Notification
+    notify-keyspace-events ""
+    
+    # Advanced Config
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    stream-node-max-bytes 4096
+    stream-node-max-entries 100
+    activerehashing yes
+    
+    # Client Output Buffer Limits
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    
+    # Frequency
+    hz 10
+    
+    # AOF Rewrite
+    aof-rewrite-incremental-fsync yes
+    
+    # RDB
+    rdb-save-incremental-fsync yes
+  
+  sentinel.conf: |
+    # Redis Sentinel Configuration
+    bind 0.0.0.0
+    port 26379
+    sentinel announce-ip ${POD_IP}
+    sentinel announce-port 26379
+    
+    # Authentication
+    requirepass ${REDIS_PASSWORD}
+    sentinel auth-pass mymaster ${REDIS_PASSWORD}
+    
+    # Monitor Redis master
+    sentinel monitor mymaster redis-0.redis-service 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel parallel-syncs mymaster 1
+    sentinel failover-timeout mymaster 10000
+    
+    # Notification scripts
+    sentinel notification-script mymaster /scripts/notify.sh
+    sentinel client-reconfig-script mymaster /scripts/reconfig.sh
+    
+    # Logging
+    logfile ""
+    loglevel notice
+    
+    # Working directory
+    dir /data
+  
+  setup-redis.sh: |
+    #!/bin/bash
+    set -e
+    
+    MASTER_HOST="redis-0.redis-service"
+    
+    if [[ "${HOSTNAME}" == "redis-0" ]]; then
+        echo "Setting up Redis master..."
+        redis-server /etc/redis/redis.conf
+    else
+        echo "Setting up Redis replica..."
+        # Wait for master to be ready
+        until redis-cli -h ${MASTER_HOST} -a ${REDIS_PASSWORD} ping; do
+            echo "Waiting for Redis master..."
+            sleep 2
+        done
+        
+        # Configure as slave
+        echo "replicaof ${MASTER_HOST} 6379" >> /etc/redis/redis.conf
+        redis-server /etc/redis/redis.conf
+    fi
+  
+  notify.sh: |
+    #!/bin/bash
+    # Notification script for Sentinel events
+    echo "Redis Sentinel Event: $*" | logger -t redis-sentinel
+    
+    # Send notification to monitoring system
+    curl -X POST http://monitoring-webhook/redis-failover \
+      -H "Content-Type: application/json" \
+      -d "{\"event\": \"$1\", \"master\": \"$2\", \"details\": \"$*\"}" || true
+  
+  reconfig.sh: |
+    #!/bin/bash
+    # Client reconfiguration script
+    echo "Redis client reconfiguration: $*" | logger -t redis-sentinel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  - port: 26379
+    targetPort: 26379
+    protocol: TCP
+    name: sentinel
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master-service
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/role: master
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/role: master
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel-service
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: sentinel
+spec:
+  type: ClusterIP
+  ports:
+  - port: 26379
+    targetPort: 26379
+    protocol: TCP
+    name: sentinel
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: sentinel
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+spec:
+  serviceName: redis-service
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: cache
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: cache
+        app.kubernetes.io/part-of: mimir
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsNonRoot: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - redis
+            topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: redis
+            app.kubernetes.io/component: cache
+      initContainers:
+      - name: config-init
+        image: redis:7-alpine
+        command:
+        - sh
+        - -c
+        - |
+          cp /tmp/redis/redis.conf /etc/redis/redis.conf
+          sed -i "s/\${REDIS_PASSWORD}/$REDIS_PASSWORD/g" /etc/redis/redis.conf
+          cp /tmp/redis/setup-redis.sh /scripts/setup-redis.sh
+          chmod +x /scripts/setup-redis.sh
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mimir-secrets
+              key: REDIS_PASSWORD
+        volumeMounts:
+        - name: redis-config-template
+          mountPath: /tmp/redis
+        - name: redis-config
+          mountPath: /etc/redis
+        - name: scripts
+          mountPath: /scripts
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        command:
+        - /scripts/setup-redis.sh
+        ports:
+        - containerPort: 6379
+          name: redis
+          protocol: TCP
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mimir-secrets
+              key: REDIS_PASSWORD
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a "$REDIS_PASSWORD" ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -a "$REDIS_PASSWORD" ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
+        - name: scripts
+          mountPath: /scripts
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - sh
+              - -c
+              - |
+                redis-cli -a "$REDIS_PASSWORD" BGSAVE
+                while [ $(redis-cli -a "$REDIS_PASSWORD" LASTSAVE) -eq $(redis-cli -a "$REDIS_PASSWORD" LASTSAVE) ]; do
+                  sleep 1
+                done
+      - name: redis-exporter
+        image: oliver006/redis_exporter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9121
+          name: metrics
+          protocol: TCP
+        env:
+        - name: REDIS_ADDR
+          value: redis://localhost:6379
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mimir-secrets
+              key: REDIS_PASSWORD
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: redis-config-template
+        configMap:
+          name: redis-ha-config
+      - name: redis-config
+        emptyDir: {}
+      - name: scripts
+        emptyDir: {}
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: cache
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-sentinel
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: sentinel
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: sentinel
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: sentinel
+        app.kubernetes.io/part-of: mimir
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsNonRoot: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                - redis
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                - sentinel
+            topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: redis
+            app.kubernetes.io/component: sentinel
+      initContainers:
+      - name: config-init
+        image: redis:7-alpine
+        command:
+        - sh
+        - -c
+        - |
+          cp /tmp/sentinel/sentinel.conf /etc/redis/sentinel.conf
+          sed -i "s/\${REDIS_PASSWORD}/$REDIS_PASSWORD/g" /etc/redis/sentinel.conf
+          sed -i "s/\${POD_IP}/$POD_IP/g" /etc/redis/sentinel.conf
+          mkdir -p /scripts
+          cp /tmp/sentinel/notify.sh /scripts/notify.sh
+          cp /tmp/sentinel/reconfig.sh /scripts/reconfig.sh
+          chmod +x /scripts/*.sh
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mimir-secrets
+              key: REDIS_PASSWORD
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: sentinel-config-template
+          mountPath: /tmp/sentinel
+        - name: sentinel-config
+          mountPath: /etc/redis
+        - name: scripts
+          mountPath: /scripts
+      containers:
+      - name: sentinel
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        command:
+        - redis-sentinel
+        - /etc/redis/sentinel.conf
+        ports:
+        - containerPort: 26379
+          name: sentinel
+          protocol: TCP
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mimir-secrets
+              key: REDIS_PASSWORD
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -p 26379 -a "$REDIS_PASSWORD" ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - redis-cli -p 26379 -a "$REDIS_PASSWORD" ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: sentinel-data
+          mountPath: /data
+        - name: sentinel-config
+          mountPath: /etc/redis
+        - name: scripts
+          mountPath: /scripts
+      volumes:
+      - name: sentinel-config-template
+        configMap:
+          name: redis-ha-config
+      - name: sentinel-config
+        emptyDir: {}
+      - name: sentinel-data
+        emptyDir: {}
+      - name: scripts
+        emptyDir: {}

@@ -1,0 +1,174 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mimir-ingress
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: mimir
+  annotations:
+    # Ingress controller annotations
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    
+    # SSL/TLS Configuration
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+    nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384"
+    
+    # Security Headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; media-src 'self'; frame-src 'none';";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
+    
+    # Rate Limiting
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    nginx.ingress.kubernetes.io/limit-whitelist: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    
+    # Body Size
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    
+    # WebSocket Support
+    nginx.ingress.kubernetes.io/websocket-services: "mimir-web-service"
+    
+    # CORS Configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://mimir.yourdomain.com,https://api.mimir.yourdomain.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization,Content-Type,Accept,Origin,X-Requested-With"
+    nginx.ingress.kubernetes.io/cors-expose-headers: "X-Total-Count,X-Page,X-Per-Page"
+    nginx.ingress.kubernetes.io/cors-max-age: "3600"
+    
+    # Authentication (optional)
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: mimir-basic-auth
+    # nginx.ingress.kubernetes.io/auth-realm: "Mimir Authentication"
+    
+    # Monitoring
+    nginx.ingress.kubernetes.io/enable-prometheus-metrics: "true"
+    
+    # Certificate Manager
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - mimir.yourdomain.com
+    - api.mimir.yourdomain.com
+    - analytics.mimir.yourdomain.com
+    secretName: mimir-tls
+  rules:
+  # Main application
+  - host: mimir.yourdomain.com
+    http:
+      paths:
+      # API routes
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-api-service
+            port:
+              number: 8000
+      # Analytics routes
+      - path: /analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-analytics-service
+            port:
+              number: 5001
+      # WebSocket routes
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-web-service
+            port:
+              number: 5000
+      # Default web interface
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-web-service
+            port:
+              number: 5000
+  
+  # API subdomain
+  - host: api.mimir.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-api-service
+            port:
+              number: 8000
+  
+  # Analytics subdomain
+  - host: analytics.mimir.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-analytics-service
+            port:
+              number: 5001
+---
+# Alternative Ingress for internal/development use
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mimir-ingress-internal
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: ingress-internal
+    app.kubernetes.io/part-of: mimir
+  annotations:
+    kubernetes.io/ingress.class: nginx-internal
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+spec:
+  ingressClassName: nginx-internal
+  rules:
+  - host: mimir.internal
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-web-service
+            port:
+              number: 5000
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-api-service
+            port:
+              number: 8000
+      - path: /analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-analytics-service
+            port:
+              number: 5001

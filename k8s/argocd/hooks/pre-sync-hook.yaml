@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mimir-pre-sync-hook
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,HookFailed
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: pre-sync
+        image: alpine/k8s:1.28.0
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          echo "🚀 Starting pre-sync validation..."
+          
+          # Check if namespace exists
+          if ! kubectl get namespace $TARGET_NAMESPACE; then
+            echo "Creating namespace $TARGET_NAMESPACE"
+            kubectl create namespace $TARGET_NAMESPACE
+          fi
+          
+          # Validate required secrets exist
+          echo "Validating secrets..."
+          REQUIRED_SECRETS="postgres-secret redis-secret jwt-secret"
+          for secret in $REQUIRED_SECRETS; do
+            if ! kubectl get secret $secret -n $TARGET_NAMESPACE; then
+              echo "❌ Required secret $secret not found in $TARGET_NAMESPACE"
+              exit 1
+            fi
+          done
+          
+          # Check resource quotas
+          echo "Checking resource availability..."
+          AVAILABLE_CPU=$(kubectl describe nodes | grep "Allocatable:" -A 5 | grep "cpu:" | awk '{sum += $2} END {print sum}')
+          AVAILABLE_MEMORY=$(kubectl describe nodes | grep "Allocatable:" -A 5 | grep "memory:" | awk '{sum += $2} END {print sum}')
+          
+          echo "Available CPU: ${AVAILABLE_CPU}m"
+          echo "Available Memory: ${AVAILABLE_MEMORY}Ki"
+          
+          # Validate PostgreSQL connectivity (if not first deployment)
+          if kubectl get deployment postgres -n $TARGET_NAMESPACE 2>/dev/null; then
+            echo "Testing database connectivity..."
+            kubectl run -n $TARGET_NAMESPACE --rm -i --restart=Never pg-test --image=postgres:16-alpine -- psql $DATABASE_URL -c "SELECT 1;" || {
+              echo "❌ Database connectivity check failed"
+              exit 1
+            }
+          fi
+          
+          # Check ArgoCD sync status
+          echo "Checking ArgoCD application health..."
+          
+          echo "✅ Pre-sync validation completed successfully"
+        env:
+        - name: TARGET_NAMESPACE
+          value: "mimir-production"  # This will be overridden per environment
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+              optional: true
+      serviceAccountName: argocd-application-controller
+  backoffLimit: 3

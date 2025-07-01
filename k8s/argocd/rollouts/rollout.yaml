@@ -1,0 +1,228 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: mimir-web-rollout
+  namespace: mimir-production
+spec:
+  replicas: 3
+  strategy:
+    blueGreen:
+      # Blue-green deployment strategy
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
+      prePromotionAnalysis:
+        templates:
+        - templateName: mimir-success-rate
+        args:
+        - name: service-name
+          value: mimir-web-preview
+      postPromotionAnalysis:
+        templates:
+        - templateName: mimir-success-rate
+        args:
+        - name: service-name
+          value: mimir-web-active
+      activeService: mimir-web-active
+      previewService: mimir-web-preview
+  selector:
+    matchLabels:
+      app: mimir-web
+  template:
+    metadata:
+      labels:
+        app: mimir-web
+    spec:
+      containers:
+      - name: mimir-web
+        image: ghcr.io/your-org/mimir:latest
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-url
+        - name: ENVIRONMENT
+          value: "production"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: mimir-success-rate
+  namespace: mimir-production
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: success-rate
+    interval: 60s
+    count: 5
+    successCondition: result[0] > 0.95
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          sum(rate(http_requests_total{service="{{args.service-name}}", status!~"5.."}[2m])) /
+          sum(rate(http_requests_total{service="{{args.service-name}}"}[2m]))
+  - name: avg-response-time
+    interval: 60s
+    count: 5
+    successCondition: result[0] < 500
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.monitoring.svc.cluster.local:9090
+        query: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{service="{{args.service-name}}"}[2m])) by (le)
+          ) * 1000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-web-active
+  namespace: mimir-production
+  labels:
+    app: mimir-web
+spec:
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  selector:
+    app: mimir-web
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-web-preview
+  namespace: mimir-production
+  labels:
+    app: mimir-web
+spec:
+  ports:
+  - port: 80
+    targetPort: 5000
+    protocol: TCP
+    name: http
+  selector:
+    app: mimir-web
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: mimir-api-rollout
+  namespace: mimir-production
+spec:
+  replicas: 3
+  strategy:
+    canary:
+      # Canary deployment strategy for API
+      maxSurge: "25%"
+      maxUnavailable: 0
+      analysis:
+        templates:
+        - templateName: mimir-success-rate
+        args:
+        - name: service-name
+          value: mimir-api
+        startingStep: 2
+        interval: 60s
+      steps:
+      - setWeight: 20
+      - pause: {duration: 2m}
+      - setWeight: 40
+      - pause: {duration: 2m}
+      - setWeight: 60
+      - pause: {duration: 2m}
+      - setWeight: 80
+      - pause: {duration: 2m}
+      trafficRouting:
+        nginx:
+          stableIngress: mimir-api-ingress
+          additionalIngressAnnotations:
+            canary-by-header: X-Canary
+            canary-by-header-value: "true"
+  selector:
+    matchLabels:
+      app: mimir-api
+  template:
+    metadata:
+      labels:
+        app: mimir-api
+    spec:
+      containers:
+      - name: mimir-api
+        image: ghcr.io/your-org/mimir-api:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-url
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret-key
+        - name: ENVIRONMENT
+          value: "production"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"

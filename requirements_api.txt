@@ -1,0 +1,73 @@
+# FastAPI Enterprise Requirements for Mimir
+# EPIC 5: Enterprise Features & Multi-tenancy
+
+# Core FastAPI framework
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+gunicorn>=21.2.0  # WSGI server for production
+
+# API utilities
+pydantic>=2.5.0  # Data validation and serialization
+pydantic-settings>=2.1.0  # Settings management
+pydantic[email]>=2.5.0  # Email validation
+
+# Authentication and security
+python-jose[cryptography]>=3.3.0  # JWT tokens
+passlib[bcrypt]>=1.7.4  # Password hashing
+python-multipart>=0.0.6  # Form data support
+cryptography>=41.0.7  # Cryptographic recipes
+
+# Rate limiting and middleware
+slowapi>=0.1.9  # Rate limiting for FastAPI
+starlette>=0.27.0  # ASGI framework (FastAPI dependency)
+
+# HTTP client
+httpx>=0.25.2  # Async HTTP client
+aiofiles>=23.2.0  # Async file operations
+
+# Monitoring and logging
+structlog>=23.2.0  # Structured logging
+prometheus-fastapi-instrumentator>=6.1.0  # Prometheus metrics
+opentelemetry-api>=1.21.0  # Distributed tracing
+opentelemetry-sdk>=1.21.0
+opentelemetry-instrumentation-fastapi>=0.42b0
+
+# Development and testing
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+httpx>=0.25.2  # For testing async endpoints
+factory-boy>=3.3.0  # Test data factories
+
+# API documentation
+python-markdown>=3.5.1  # Enhanced API docs
+pygments>=2.17.2  # Syntax highlighting in docs
+
+# Data serialization
+orjson>=3.9.10  # Fast JSON serialization
+msgpack>=1.0.7  # Binary serialization
+
+# Validation and utilities
+email-validator>=2.1.0
+phonenumbers>=8.13.26  # Phone number validation
+python-slugify>=8.0.1  # URL slug generation
+
+# File handling
+python-magic>=0.4.27  # File type detection
+pillow>=10.1.0  # Image processing
+
+# Background tasks (if not using Celery)
+arq>=0.25.0  # Alternative async task queue
+
+# Configuration management
+dynaconf>=3.2.4  # Configuration management
+python-dotenv>=1.0.0  # Environment variables
+
+# Database migrations (FastAPI specific)
+aerich>=0.7.2  # Database migrations for Tortoise ORM (if using)
+
+# GraphQL support (optional)
+strawberry-graphql[fastapi]>=0.214.0
+
+# WebSocket support
+websockets>=12.0

@@ -1,0 +1,550 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: 3.11
+  MIN_COVERAGE: 80
+  MAX_COMPLEXITY: 10
+  MAX_RESPONSE_TIME: 500
+  MIN_PERFORMANCE_SCORE: 85
+
+jobs:
+  code-quality:
+    name: Code Quality Assessment
+    runs-on: ubuntu-latest
+    outputs:
+      quality-score: ${{ steps.calculate.outputs.quality-score }}
+      coverage-percentage: ${{ steps.coverage.outputs.coverage }}
+      complexity-score: ${{ steps.complexity.outputs.score }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 black mypy radon bandit safety
+
+      - name: Code style check
+        id: style
+        run: |
+          echo "Running code style checks..."
+          
+          # Black formatting check
+          black_score=100
+          if ! black --check . --quiet; then
+            black_score=0
+            echo "❌ Black formatting check failed"
+          else
+            echo "✅ Black formatting check passed"
+          fi
+          
+          # Flake8 linting
+          flake8_score=100
+          flake8_issues=$(flake8 . --count --exit-zero --max-complexity=${{ env.MAX_COMPLEXITY }} --max-line-length=120 --statistics | tail -1 | cut -d' ' -f1)
+          if [[ "$flake8_issues" -gt 0 ]]; then
+            flake8_score=$((100 - flake8_issues * 5))
+            if [[ $flake8_score -lt 0 ]]; then flake8_score=0; fi
+            echo "⚠️ Flake8 found $flake8_issues issues (score: $flake8_score)"
+          else
+            echo "✅ Flake8 check passed"
+          fi
+          
+          echo "black-score=$black_score" >> $GITHUB_OUTPUT
+          echo "flake8-score=$flake8_score" >> $GITHUB_OUTPUT
+
+      - name: Type checking
+        id: types
+        run: |
+          echo "Running type checks..."
+          mypy_score=100
+          
+          # Run mypy and count errors
+          mypy_errors=$(mypy . --ignore-missing-imports --strict-optional 2>&1 | grep -c "error:" || echo "0")
+          
+          if [[ "$mypy_errors" -gt 0 ]]; then
+            mypy_score=$((100 - mypy_errors * 10))
+            if [[ $mypy_score -lt 0 ]]; then mypy_score=0; fi
+            echo "⚠️ MyPy found $mypy_errors type errors (score: $mypy_score)"
+          else
+            echo "✅ Type checking passed"
+          fi
+          
+          echo "mypy-score=$mypy_score" >> $GITHUB_OUTPUT
+
+      - name: Complexity analysis
+        id: complexity
+        run: |
+          echo "Analyzing code complexity..."
+          
+          # Calculate average cyclomatic complexity
+          radon cc . --average --show-complexity | tee complexity-report.txt
+          
+          avg_complexity=$(radon cc . --average | grep "Average complexity:" | awk '{print $3}' | cut -d'(' -f1)
+          
+          if [[ -z "$avg_complexity" ]]; then
+            avg_complexity=1
+          fi
+          
+          # Score based on complexity (lower is better)
+          if (( $(echo "$avg_complexity <= 5" | bc -l) )); then
+            complexity_score=100
+          elif (( $(echo "$avg_complexity <= 10" | bc -l) )); then
+            complexity_score=80
+          elif (( $(echo "$avg_complexity <= 15" | bc -l) )); then
+            complexity_score=60
+          else
+            complexity_score=40
+          fi
+          
+          echo "Average complexity: $avg_complexity (score: $complexity_score)"
+          echo "score=$complexity_score" >> $GITHUB_OUTPUT
+          echo "average=$avg_complexity" >> $GITHUB_OUTPUT
+
+      - name: Test coverage
+        id: coverage
+        run: |
+          echo "Running test coverage analysis..."
+          
+          # Run tests with coverage
+          pytest tests/ --cov=. --cov-report=xml --cov-report=html --cov-report=term-missing --cov-fail-under=${{ env.MIN_COVERAGE }} || coverage_failed=true
+          
+          # Extract coverage percentage
+          coverage_percent=$(python -c "
+          import xml.etree.ElementTree as ET
+          try:
+              tree = ET.parse('coverage.xml')
+              root = tree.getroot()
+              coverage = float(root.attrib['line-rate']) * 100
+              print(f'{coverage:.1f}')
+          except:
+              print('0')
+          ")
+          
+          if [[ "${coverage_failed:-false}" == "true" ]]; then
+            echo "❌ Coverage below minimum threshold (${{ env.MIN_COVERAGE }}%): $coverage_percent%"
+          else
+            echo "✅ Coverage meets requirements: $coverage_percent%"
+          fi
+          
+          echo "coverage=$coverage_percent" >> $GITHUB_OUTPUT
+
+      - name: Security analysis
+        id: security
+        run: |
+          echo "Running security analysis..."
+          
+          # Bandit security check
+          bandit_score=100
+          bandit -r . -f json -o bandit-report.json || bandit_failed=true
+          
+          if [[ "${bandit_failed:-false}" == "true" ]]; then
+            bandit_issues=$(cat bandit-report.json | jq '.results | length')
+            bandit_score=$((100 - bandit_issues * 20))
+            if [[ $bandit_score -lt 0 ]]; then bandit_score=0; fi
+            echo "⚠️ Bandit found $bandit_issues security issues (score: $bandit_score)"
+          else
+            echo "✅ Bandit security check passed"
+          fi
+          
+          # Safety dependency check
+          safety_score=100
+          safety check --json --output safety-report.json || safety_failed=true
+          
+          if [[ "${safety_failed:-false}" == "true" ]]; then
+            safety_issues=$(cat safety-report.json | jq '. | length')
+            safety_score=$((100 - safety_issues * 25))
+            if [[ $safety_score -lt 0 ]]; then safety_score=0; fi
+            echo "⚠️ Safety found $safety_issues vulnerable dependencies (score: $safety_score)"
+          else
+            echo "✅ Safety dependency check passed"
+          fi
+          
+          # Combined security score
+          security_score=$(( (bandit_score + safety_score) / 2 ))
+          echo "bandit-score=$bandit_score" >> $GITHUB_OUTPUT
+          echo "safety-score=$safety_score" >> $GITHUB_OUTPUT
+          echo "security-score=$security_score" >> $GITHUB_OUTPUT
+
+      - name: Calculate overall quality score
+        id: calculate
+        run: |
+          # Get all scores
+          black_score=${{ steps.style.outputs.black-score }}
+          flake8_score=${{ steps.style.outputs.flake8-score }}
+          mypy_score=${{ steps.types.outputs.mypy-score }}
+          complexity_score=${{ steps.complexity.outputs.score }}
+          coverage_percent=${{ steps.coverage.outputs.coverage }}
+          security_score=${{ steps.security.outputs.security-score }}
+          
+          # Weighted average (coverage and security are more important)
+          quality_score=$(python -c "
+          scores = {
+              'style': ($black_score + $flake8_score) / 2,
+              'types': $mypy_score,
+              'complexity': $complexity_score,
+              'coverage': $coverage_percent,
+              'security': $security_score
+          }
+          
+          weights = {
+              'style': 0.15,
+              'types': 0.15,
+              'complexity': 0.15,
+              'coverage': 0.25,
+              'security': 0.30
+          }
+          
+          weighted_score = sum(scores[key] * weights[key] for key in scores)
+          print(f'{weighted_score:.1f}')
+          ")
+          
+          echo "=== Quality Assessment Summary ==="
+          echo "Code Style: ${{ steps.style.outputs.black-score }}% (Black), ${{ steps.style.outputs.flake8-score }}% (Flake8)"
+          echo "Type Safety: ${{ steps.types.outputs.mypy-score }}%"
+          echo "Complexity: ${{ steps.complexity.outputs.score }}% (avg: ${{ steps.complexity.outputs.average }})"
+          echo "Test Coverage: ${coverage_percent}%"
+          echo "Security: ${security_score}%"
+          echo "Overall Quality Score: ${quality_score}%"
+          
+          echo "quality-score=$quality_score" >> $GITHUB_OUTPUT
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
+            complexity-report.txt
+            bandit-report.json
+            safety-report.json
+
+  performance-benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.11.0-pg14
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: mimir_user
+          POSTGRES_DB: mimir_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    outputs:
+      performance-score: ${{ steps.benchmark.outputs.performance-score }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install locust pytest-benchmark
+
+      - name: Setup test environment
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          REDIS_URL: redis://localhost:6379/0
+          POSTGRES_PASSWORD: test_password
+        run: |
+          python db_manager_postgres.py --init
+          
+          # Seed test data
+          python -c "
+          import db_manager_postgres as db
+          for i in range(100):
+              db.add_article(
+                  url=f'https://benchmark.com/article-{i}',
+                  title=f'Benchmark Article {i}',
+                  publication_date=None,
+                  source_website='benchmark.com',
+                  content_summary=f'Summary {i}',
+                  full_content=f'Content {i}' * 100
+              )
+          "
+
+      - name: Database performance benchmarks
+        id: db-bench
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          POSTGRES_PASSWORD: test_password
+        run: |
+          echo "Running database performance benchmarks..."
+          
+          python -c "
+          import time
+          import db_manager_postgres as db
+          import statistics
+          
+          # Test insert performance
+          insert_times = []
+          for i in range(50):
+              start = time.time()
+              db.add_article(
+                  url=f'https://perf-test.com/article-{i}',
+                  title=f'Performance Test {i}',
+                  publication_date=None,
+                  source_website='perf-test.com',
+                  content_summary=f'Performance summary {i}',
+                  full_content=f'Performance content {i}' * 50
+              )
+              insert_times.append(time.time() - start)
+          
+          avg_insert_time = statistics.mean(insert_times)
+          
+          # Test search performance
+          search_times = []
+          for i in range(20):
+              start = time.time()
+              results = db.search_articles('performance', limit=10)
+              search_times.append(time.time() - start)
+          
+          avg_search_time = statistics.mean(search_times)
+          
+          print(f'Average insert time: {avg_insert_time:.4f}s')
+          print(f'Average search time: {avg_search_time:.4f}s')
+          
+          # Score based on performance
+          insert_score = 100 if avg_insert_time < 0.1 else max(0, 100 - (avg_insert_time * 1000))
+          search_score = 100 if avg_search_time < 0.05 else max(0, 100 - (avg_search_time * 2000))
+          
+          print(f'Insert performance score: {insert_score:.1f}')
+          print(f'Search performance score: {search_score:.1f}')
+          
+          with open('db_performance.txt', 'w') as f:
+              f.write(f'insert_time={avg_insert_time}\\n')
+              f.write(f'search_time={avg_search_time}\\n')
+              f.write(f'insert_score={insert_score}\\n')
+              f.write(f'search_score={search_score}\\n')
+          "
+
+      - name: API performance benchmarks
+        id: api-bench
+        env:
+          DATABASE_URL: postgresql://mimir_user:test_password@localhost:5432/mimir_test
+          REDIS_URL: redis://localhost:6379/0
+          POSTGRES_PASSWORD: test_password
+          JWT_SECRET_KEY: test-secret-key
+        run: |
+          echo "Running API performance benchmarks..."
+          
+          # Start the API
+          python api/app.py &
+          API_PID=$!
+          sleep 10
+          
+          # Run performance tests
+          python -c "
+          import requests
+          import time
+          import statistics
+          import json
+          
+          base_url = 'http://localhost:8000'
+          
+          # Test article listing performance
+          response_times = []
+          for i in range(20):
+              start = time.time()
+              response = requests.get(f'{base_url}/api/articles?limit=10')
+              response_times.append(time.time() - start)
+              
+              if response.status_code != 200:
+                  print(f'API request failed: {response.status_code}')
+                  break
+          
+          avg_response_time = statistics.mean(response_times) * 1000  # Convert to ms
+          p95_response_time = statistics.quantiles(response_times, n=20)[18] * 1000
+          
+          print(f'Average response time: {avg_response_time:.1f}ms')
+          print(f'95th percentile response time: {p95_response_time:.1f}ms')
+          
+          # Score based on response times
+          avg_score = 100 if avg_response_time < 100 else max(0, 100 - (avg_response_time - 100) / 10)
+          p95_score = 100 if p95_response_time < 200 else max(0, 100 - (p95_response_time - 200) / 20)
+          
+          api_score = (avg_score + p95_score) / 2
+          
+          print(f'API performance score: {api_score:.1f}')
+          
+          with open('api_performance.txt', 'w') as f:
+              f.write(f'avg_response_time={avg_response_time}\\n')
+              f.write(f'p95_response_time={p95_response_time}\\n')
+              f.write(f'api_score={api_score}\\n')
+          "
+          
+          # Cleanup
+          kill $API_PID || true
+
+      - name: Calculate performance score
+        id: benchmark
+        run: |
+          # Read performance results
+          source db_performance.txt
+          source api_performance.txt
+          
+          # Calculate overall performance score
+          performance_score=$(python -c "
+          scores = {
+              'db_insert': $insert_score,
+              'db_search': $search_score,
+              'api': $api_score
+          }
+          
+          overall = (scores['db_insert'] + scores['db_search'] + scores['api']) / 3
+          print(f'{overall:.1f}')
+          ")
+          
+          echo "=== Performance Benchmark Results ==="
+          echo "Database Insert: ${insert_score}% (${insert_time}s avg)"
+          echo "Database Search: ${search_score}% (${search_time}s avg)"
+          echo "API Response: ${api_score}% (${avg_response_time}ms avg, ${p95_response_time}ms p95)"
+          echo "Overall Performance Score: ${performance_score}%"
+          
+          echo "performance-score=$performance_score" >> $GITHUB_OUTPUT
+
+  quality-gate-check:
+    name: Quality Gate Validation
+    runs-on: ubuntu-latest
+    needs: [code-quality, performance-benchmarks]
+    steps:
+      - name: Evaluate quality gates
+        id: evaluate
+        run: |
+          quality_score=${{ needs.code-quality.outputs.quality-score }}
+          coverage_percentage=${{ needs.code-quality.outputs.coverage-percentage }}
+          complexity_score=${{ needs.code-quality.outputs.complexity-score }}
+          performance_score=${{ needs.performance-benchmarks.outputs.performance-score }}
+          
+          echo "=== Quality Gate Evaluation ==="
+          echo "Quality Score: ${quality_score}% (minimum: 75%)"
+          echo "Coverage: ${coverage_percentage}% (minimum: ${{ env.MIN_COVERAGE }}%)"
+          echo "Performance: ${performance_score}% (minimum: ${{ env.MIN_PERFORMANCE_SCORE }}%)"
+          
+          # Check all gates
+          gates_passed=true
+          
+          if (( $(echo "$quality_score < 75" | bc -l) )); then
+            echo "❌ Quality gate FAILED: Overall quality score below 75%"
+            gates_passed=false
+          else
+            echo "✅ Quality gate PASSED: Overall quality score"
+          fi
+          
+          if (( $(echo "$coverage_percentage < ${{ env.MIN_COVERAGE }}" | bc -l) )); then
+            echo "❌ Quality gate FAILED: Test coverage below ${{ env.MIN_COVERAGE }}%"
+            gates_passed=false
+          else
+            echo "✅ Quality gate PASSED: Test coverage"
+          fi
+          
+          if (( $(echo "$performance_score < ${{ env.MIN_PERFORMANCE_SCORE }}" | bc -l) )); then
+            echo "❌ Quality gate FAILED: Performance score below ${{ env.MIN_PERFORMANCE_SCORE }}%"
+            gates_passed=false
+          else
+            echo "✅ Quality gate PASSED: Performance benchmarks"
+          fi
+          
+          if [[ "$gates_passed" == "true" ]]; then
+            echo "🎉 ALL QUALITY GATES PASSED - Ready for deployment!"
+            echo "status=passed" >> $GITHUB_OUTPUT
+          else
+            echo "🚫 QUALITY GATES FAILED - Deployment blocked"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Update PR with quality report
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const qualityScore = '${{ needs.code-quality.outputs.quality-score }}';
+            const coverage = '${{ needs.code-quality.outputs.coverage-percentage }}';
+            const performance = '${{ needs.performance-benchmarks.outputs.performance-score }}';
+            const status = '${{ steps.evaluate.outputs.status }}';
+            
+            const statusIcon = status === 'passed' ? '✅' : '❌';
+            const statusText = status === 'passed' ? 'PASSED' : 'FAILED';
+            
+            const comment = `## ${statusIcon} Quality Gates ${statusText}
+            
+            | Metric | Score | Threshold | Status |
+            |--------|-------|-----------|--------|
+            | Overall Quality | ${qualityScore}% | 75% | ${qualityScore >= 75 ? '✅' : '❌'} |
+            | Test Coverage | ${coverage}% | ${{ env.MIN_COVERAGE }}% | ${coverage >= ${{ env.MIN_COVERAGE }} ? '✅' : '❌'} |
+            | Performance | ${performance}% | ${{ env.MIN_PERFORMANCE_SCORE }}% | ${performance >= ${{ env.MIN_PERFORMANCE_SCORE }} ? '✅' : '❌'} |
+            
+            ${status === 'passed' ? 
+              '🎉 All quality gates passed! This PR is ready for review and deployment.' :
+              '⚠️ Some quality gates failed. Please address the issues before merging.'}
+            
+            <details>
+            <summary>📊 Detailed Metrics</summary>
+            
+            ### Code Quality Breakdown
+            - Code Style: Check individual job for Black/Flake8 scores
+            - Type Safety: Check individual job for MyPy results
+            - Complexity: Check individual job for complexity analysis
+            - Security: Check individual job for Bandit/Safety results
+            
+            ### Performance Benchmarks
+            - Database Performance: Insert/Search operations
+            - API Performance: Response times and throughput
+            
+            </details>`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  deployment-approval:
+    name: Deployment Approval Gate
+    runs-on: ubuntu-latest
+    needs: quality-gate-check
+    if: github.ref == 'refs/heads/main' && needs.quality-gate-check.outputs.status == 'passed'
+    environment:
+      name: production-approval
+    steps:
+      - name: Manual approval required
+        run: |
+          echo "Quality gates passed. Manual approval required for production deployment."
+          echo "Review the quality report and approve deployment if satisfied."

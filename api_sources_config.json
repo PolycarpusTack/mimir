@@ -1,0 +1,66 @@
+{
+  "api_settings": {
+    "daily_article_limit": 500,
+    "articles_per_source": 20,
+    "articles_per_run": 100,
+    "enabled": true,
+    "filter_settings": {
+      "require_keywords": true,
+      "min_keyword_relevance": 0.3,
+      "exclude_domains": ["example.com", "test.com"],
+      "language": "en",
+      "deduplication": true
+    }
+  },
+  "newsapi": {
+    "enabled": false,
+    "api_key": "YOUR_NEWSAPI_KEY_HERE",
+    "sources_filter": ["techcrunch", "the-verge", "ars-technica", "wired"],
+    "categories": ["technology", "business"],
+    "page_size": 20,
+    "sort_by": "relevancy",
+    "docs": "Get free key at https://newsapi.org/register"
+  },
+  "reddit": {
+    "enabled": false,
+    "client_id": "YOUR_CLIENT_ID",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "user_agent": "Mimir News Aggregator 1.0",
+    "subreddits": [
+      "technology",
+      "television",
+      "broadcasting",
+      "cordcutters",
+      "streaming"
+    ],
+    "post_limit": 10,
+    "min_score": 10,
+    "docs": "Create app at https://www.reddit.com/prefs/apps"
+  },
+  "keywords": {
+    "primary": [
+      "broadcast",
+      "streaming",
+      "OTT",
+      "television",
+      "media technology",
+      "content delivery",
+      "video platform"
+    ],
+    "secondary": [
+      "5G broadcast",
+      "ATSC 3.0",
+      "DVB",
+      "IPTV",
+      "CDN",
+      "live streaming",
+      "video compression"
+    ],
+    "exclude": [
+      "sports",
+      "celebrity",
+      "gossip",
+      "fashion"
+    ]
+  }
+}

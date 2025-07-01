@@ -1,0 +1,134 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mimir
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: mimir
+
+resources:
+  # Core infrastructure
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  
+  # Database
+  - postgres.yaml
+  - redis.yaml
+  
+  # High Availability
+  - postgres-ha.yaml
+  - redis-ha.yaml
+  - backup-restore.yaml
+  
+  # Application deployments
+  - api-deployment.yaml
+  - web-deployment.yaml
+  - worker-deployment.yaml
+  - analytics-deployment.yaml
+  
+  # Ingress
+  - ingress.yaml
+  
+  # Autoscaling
+  - hpa.yaml
+  - vpa.yaml
+  - custom-metrics.yaml
+  
+  # Observability stack (deployed in separate namespaces)
+  - ../monitoring
+  - ../logging
+  - ../tracing
+  - observability-stack.yaml
+
+# Apply common annotations
+commonAnnotations:
+  version: "1.0.0"
+
+# Configure image tags centrally
+images:
+  - name: postgres
+    newTag: "16-alpine"
+  - name: redis
+    newTag: "7-alpine"
+  - name: mimir
+    newName: localhost:5000/mimir
+    newTag: latest
+  - name: mimir-api
+    newName: localhost:5000/mimir
+    newTag: api-latest
+  - name: mimir-worker
+    newName: localhost:5000/mimir
+    newTag: worker-latest
+  - name: mimir-analytics
+    newName: localhost:5000/mimir
+    newTag: analytics-latest
+
+# Resource name prefixes/suffixes
+namePrefix: ""
+nameSuffix: ""
+
+# Configure default resource requirements
+patches:
+  - target:
+      kind: Deployment
+      name: ".*"
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+  
+  - target:
+      kind: StatefulSet
+      name: ".*"
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+
+# Variable replacements
+vars:
+  - name: POSTGRES_SERVICE
+    objref:
+      kind: Service
+      name: postgres-service
+      apiVersion: v1
+    fieldref:
+      fieldpath: metadata.name
+  
+  - name: REDIS_SERVICE
+    objref:
+      kind: Service
+      name: redis-service
+      apiVersion: v1
+    fieldref:
+      fieldpath: metadata.name
+
+# Config generation
+configMapGenerator:
+  - name: mimir-version
+    literals:
+      - VERSION=1.0.0
+      - BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+      - GIT_COMMIT=$(git rev-parse HEAD)
+
+# Secret generation (example - use external secret management in production)
+secretGenerator:
+  - name: mimir-generated-secrets
+    literals:
+      - API_KEY=$(openssl rand -hex 32)
+    options:
+      disableNameSuffixHash: true

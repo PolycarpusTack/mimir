@@ -1,0 +1,576 @@
+# Backup and Disaster Recovery Configuration for Mimir
+# Includes automated backups, cross-region replication, and restore procedures
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-scripts
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+data:
+  backup-postgres.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    # Configuration
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_NAME="postgres_backup_${TIMESTAMP}"
+    BACKUP_DIR="/backup/postgres"
+    S3_BUCKET="${S3_BACKUP_BUCKET}"
+    S3_PREFIX="postgres"
+    RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
+    
+    # Create backup directory
+    mkdir -p "${BACKUP_DIR}"
+    
+    echo "Starting PostgreSQL backup: ${BACKUP_NAME}"
+    
+    # Perform backup
+    PGPASSWORD="${POSTGRES_PASSWORD}" pg_dumpall \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      --clean \
+      --if-exists \
+      --verbose \
+      | gzip > "${BACKUP_DIR}/${BACKUP_NAME}.sql.gz"
+    
+    # Calculate checksum
+    sha256sum "${BACKUP_DIR}/${BACKUP_NAME}.sql.gz" > "${BACKUP_DIR}/${BACKUP_NAME}.sql.gz.sha256"
+    
+    # Upload to S3
+    echo "Uploading backup to S3..."
+    aws s3 cp "${BACKUP_DIR}/${BACKUP_NAME}.sql.gz" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.sql.gz" \
+      --storage-class STANDARD_IA \
+      --encryption AES256
+    
+    aws s3 cp "${BACKUP_DIR}/${BACKUP_NAME}.sql.gz.sha256" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.sql.gz.sha256"
+    
+    # Cross-region replication (if configured)
+    if [ -n "${S3_BACKUP_BUCKET_DR}" ]; then
+      echo "Replicating backup to DR region..."
+      aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.sql.gz" \
+        "s3://${S3_BACKUP_BUCKET_DR}/${S3_PREFIX}/${BACKUP_NAME}.sql.gz" \
+        --source-region "${AWS_REGION}" \
+        --region "${AWS_REGION_DR}"
+    fi
+    
+    # Clean up old backups
+    echo "Cleaning up old backups..."
+    aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/" | \
+      awk '{print $4}' | \
+      sort -r | \
+      tail -n +$((RETENTION_DAYS + 1)) | \
+      xargs -I {} aws s3 rm "s3://${S3_BUCKET}/${S3_PREFIX}/{}"
+    
+    # Clean up local backup
+    rm -f "${BACKUP_DIR}/${BACKUP_NAME}.sql.gz"
+    rm -f "${BACKUP_DIR}/${BACKUP_NAME}.sql.gz.sha256"
+    
+    echo "Backup completed successfully: ${BACKUP_NAME}"
+    
+    # Send notification
+    curl -X POST "${WEBHOOK_URL}/backup-complete" \
+      -H "Content-Type: application/json" \
+      -d "{\"service\": \"postgres\", \"backup\": \"${BACKUP_NAME}\", \"status\": \"success\"}" || true
+  
+  backup-redis.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    # Configuration
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_NAME="redis_backup_${TIMESTAMP}"
+    BACKUP_DIR="/backup/redis"
+    S3_BUCKET="${S3_BACKUP_BUCKET}"
+    S3_PREFIX="redis"
+    
+    # Create backup directory
+    mkdir -p "${BACKUP_DIR}"
+    
+    echo "Starting Redis backup: ${BACKUP_NAME}"
+    
+    # Trigger BGSAVE
+    redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" BGSAVE
+    
+    # Wait for backup to complete
+    while [ $(redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" LASTSAVE) -eq $(redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" LASTSAVE) ]; do
+      sleep 1
+    done
+    
+    # Copy dump file
+    redis-cli -h "${REDIS_HOST}" -a "${REDIS_PASSWORD}" --rdb "${BACKUP_DIR}/${BACKUP_NAME}.rdb"
+    
+    # Compress and calculate checksum
+    gzip "${BACKUP_DIR}/${BACKUP_NAME}.rdb"
+    sha256sum "${BACKUP_DIR}/${BACKUP_NAME}.rdb.gz" > "${BACKUP_DIR}/${BACKUP_NAME}.rdb.gz.sha256"
+    
+    # Upload to S3
+    echo "Uploading backup to S3..."
+    aws s3 cp "${BACKUP_DIR}/${BACKUP_NAME}.rdb.gz" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.rdb.gz" \
+      --storage-class STANDARD_IA \
+      --encryption AES256
+    
+    aws s3 cp "${BACKUP_DIR}/${BACKUP_NAME}.rdb.gz.sha256" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.rdb.gz.sha256"
+    
+    # Clean up
+    rm -f "${BACKUP_DIR}/${BACKUP_NAME}.rdb.gz"
+    rm -f "${BACKUP_DIR}/${BACKUP_NAME}.rdb.gz.sha256"
+    
+    echo "Backup completed successfully: ${BACKUP_NAME}"
+  
+  backup-application.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    # Configuration
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_NAME="application_backup_${TIMESTAMP}"
+    BACKUP_DIR="/backup/application"
+    S3_BUCKET="${S3_BACKUP_BUCKET}"
+    S3_PREFIX="application"
+    
+    # Create backup directory
+    mkdir -p "${BACKUP_DIR}"
+    
+    echo "Starting application data backup: ${BACKUP_NAME}"
+    
+    # Create manifest
+    cat > "${BACKUP_DIR}/manifest.json" <<EOF
+    {
+      "timestamp": "${TIMESTAMP}",
+      "version": "$(cat /app/VERSION || echo 'unknown')",
+      "components": {
+        "uploads": "/var/uploads",
+        "reports": "/app/reports",
+        "config": "/app/config"
+      }
+    }
+    EOF
+    
+    # Backup application data
+    tar -czf "${BACKUP_DIR}/${BACKUP_NAME}_uploads.tar.gz" -C / var/uploads || true
+    tar -czf "${BACKUP_DIR}/${BACKUP_NAME}_reports.tar.gz" -C /app reports || true
+    tar -czf "${BACKUP_DIR}/${BACKUP_NAME}_config.tar.gz" -C /app config || true
+    
+    # Upload to S3
+    for file in ${BACKUP_DIR}/${BACKUP_NAME}*.tar.gz; do
+      if [ -f "$file" ]; then
+        aws s3 cp "$file" "s3://${S3_BUCKET}/${S3_PREFIX}/" \
+          --storage-class STANDARD_IA \
+          --encryption AES256
+      fi
+    done
+    
+    aws s3 cp "${BACKUP_DIR}/manifest.json" \
+      "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}_manifest.json"
+    
+    # Clean up
+    rm -rf "${BACKUP_DIR}"/*
+    
+    echo "Application backup completed: ${BACKUP_NAME}"
+  
+  restore-postgres.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    # Configuration
+    BACKUP_NAME="${1:-latest}"
+    RESTORE_DIR="/restore/postgres"
+    S3_BUCKET="${S3_BACKUP_BUCKET}"
+    S3_PREFIX="postgres"
+    
+    mkdir -p "${RESTORE_DIR}"
+    
+    echo "Starting PostgreSQL restore: ${BACKUP_NAME}"
+    
+    # Download backup
+    if [ "${BACKUP_NAME}" = "latest" ]; then
+      BACKUP_NAME=$(aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX}/" | \
+        grep ".sql.gz$" | \
+        sort | \
+        tail -n 1 | \
+        awk '{print $4}')
+    fi
+    
+    echo "Downloading backup: ${BACKUP_NAME}"
+    aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}" "${RESTORE_DIR}/"
+    aws s3 cp "s3://${S3_BUCKET}/${S3_PREFIX}/${BACKUP_NAME}.sha256" "${RESTORE_DIR}/"
+    
+    # Verify checksum
+    cd "${RESTORE_DIR}"
+    sha256sum -c "${BACKUP_NAME}.sha256"
+    
+    # Restore database
+    echo "Restoring database..."
+    gunzip -c "${BACKUP_NAME}" | \
+      PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+        -h "${POSTGRES_HOST}" \
+        -U "${POSTGRES_USER}" \
+        -d postgres
+    
+    # Clean up
+    rm -f "${RESTORE_DIR}/${BACKUP_NAME}"
+    rm -f "${RESTORE_DIR}/${BACKUP_NAME}.sha256"
+    
+    echo "Restore completed successfully"
+  
+  verify-backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    
+    # Verify backup integrity and test restore process
+    
+    echo "Starting backup verification..."
+    
+    # Check PostgreSQL backup
+    LATEST_PG_BACKUP=$(aws s3 ls "s3://${S3_BACKUP_BUCKET}/postgres/" | \
+      grep ".sql.gz$" | \
+      sort | \
+      tail -n 1 | \
+      awk '{print $4}')
+    
+    if [ -z "$LATEST_PG_BACKUP" ]; then
+      echo "ERROR: No PostgreSQL backup found"
+      exit 1
+    fi
+    
+    BACKUP_AGE=$(aws s3 ls "s3://${S3_BACKUP_BUCKET}/postgres/${LATEST_PG_BACKUP}" | \
+      awk '{print $1" "$2}' | \
+      xargs -I {} date -d {} +%s)
+    CURRENT_TIME=$(date +%s)
+    AGE_HOURS=$(( (CURRENT_TIME - BACKUP_AGE) / 3600 ))
+    
+    if [ $AGE_HOURS -gt 24 ]; then
+      echo "WARNING: Latest backup is ${AGE_HOURS} hours old"
+    fi
+    
+    echo "Latest PostgreSQL backup: ${LATEST_PG_BACKUP} (${AGE_HOURS} hours old)"
+    
+    # Verify checksum
+    aws s3 cp "s3://${S3_BACKUP_BUCKET}/postgres/${LATEST_PG_BACKUP}.sha256" - | \
+      sha256sum -c -
+    
+    echo "Backup verification completed successfully"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: mimir
+            app.kubernetes.io/component: backup
+            job-type: postgres-backup
+        spec:
+          serviceAccountName: backup-service-account
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            fsGroup: 999
+          containers:
+          - name: postgres-backup
+            image: postgres:16-alpine
+            imagePullPolicy: IfNotPresent
+            command:
+            - /scripts/backup-postgres.sh
+            env:
+            - name: POSTGRES_HOST
+              value: postgres-primary-service
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: mimir-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-secrets
+                  key: POSTGRES_PASSWORD
+            - name: S3_BACKUP_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: S3_BACKUP_BUCKET
+            - name: S3_BACKUP_BUCKET_DR
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: S3_BACKUP_BUCKET_DR
+                  optional: true
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: AWS_REGION
+            - name: AWS_REGION_DR
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: AWS_REGION_DR
+                  optional: true
+            - name: BACKUP_RETENTION_DAYS
+              value: "30"
+            - name: WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: WEBHOOK_URL
+                  optional: true
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-temp
+              mountPath: /backup
+            - name: aws-credentials
+              mountPath: /root/.aws
+              readOnly: true
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: backup-temp
+            emptyDir: {}
+          - name: aws-credentials
+            secret:
+              secretName: aws-backup-credentials
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-backup
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "30 2 * * *"  # Daily at 2:30 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: mimir
+            app.kubernetes.io/component: backup
+            job-type: redis-backup
+        spec:
+          serviceAccountName: backup-service-account
+          restartPolicy: OnFailure
+          containers:
+          - name: redis-backup
+            image: redis:7-alpine
+            imagePullPolicy: IfNotPresent
+            command:
+            - /scripts/backup-redis.sh
+            env:
+            - name: REDIS_HOST
+              value: redis-master-service
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-secrets
+                  key: REDIS_PASSWORD
+            - name: S3_BACKUP_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: S3_BACKUP_BUCKET
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: backup-temp
+              mountPath: /backup
+            - name: aws-credentials
+              mountPath: /root/.aws
+              readOnly: true
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: backup-temp
+            emptyDir: {}
+          - name: aws-credentials
+            secret:
+              secretName: aws-backup-credentials
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-verification
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+spec:
+  schedule: "0 6 * * *"  # Daily at 6 AM
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: mimir
+            app.kubernetes.io/component: backup
+            job-type: backup-verification
+        spec:
+          serviceAccountName: backup-service-account
+          restartPolicy: OnFailure
+          containers:
+          - name: verify-backup
+            image: amazon/aws-cli:latest
+            imagePullPolicy: IfNotPresent
+            command:
+            - /scripts/verify-backup.sh
+            env:
+            - name: S3_BACKUP_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: S3_BACKUP_BUCKET
+            volumeMounts:
+            - name: backup-scripts
+              mountPath: /scripts
+            - name: aws-credentials
+              mountPath: /root/.aws
+              readOnly: true
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "50m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"
+          volumes:
+          - name: backup-scripts
+            configMap:
+              name: backup-scripts
+              defaultMode: 0755
+          - name: aws-credentials
+            secret:
+              secretName: aws-backup-credentials
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-service-account
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-role
+  namespace: mimir
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-rolebinding
+  namespace: mimir
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: backup-role
+subjects:
+- kind: ServiceAccount
+  name: backup-service-account
+  namespace: mimir
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+data:
+  S3_BACKUP_BUCKET: "mimir-backups-primary"
+  S3_BACKUP_BUCKET_DR: "mimir-backups-dr"
+  AWS_REGION: "us-east-1"
+  AWS_REGION_DR: "us-west-2"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-backup-credentials
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+type: Opaque
+stringData:
+  credentials: |
+    [default]
+    aws_access_key_id = CHANGE_THIS_ACCESS_KEY
+    aws_secret_access_key = CHANGE_THIS_SECRET_KEY
+  config: |
+    [default]
+    region = us-east-1
+    output = json
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backup-secrets
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: backup
+type: Opaque
+stringData:
+  WEBHOOK_URL: "https://monitoring.example.com/webhooks/backup"

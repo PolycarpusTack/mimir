@@ -1,0 +1,411 @@
+# Grafana Infrastructure Dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-infrastructure
+  namespace: mimir-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+data:
+  kubernetes-cluster.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "k8s-cluster",
+        "title": "Kubernetes Cluster Overview",
+        "tags": ["kubernetes", "infrastructure"],
+        "timezone": "browser",
+        "schemaVersion": 30,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+            "type": "stat",
+            "title": "Cluster CPU Usage",
+            "targets": [
+              {
+                "expr": "cluster:cpu_utilization",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "red", "value": 85}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+            "type": "stat",
+            "title": "Cluster Memory Usage",
+            "targets": [
+              {
+                "expr": "cluster:memory_utilization",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "red", "value": 85}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+            "type": "stat",
+            "title": "Total Nodes",
+            "targets": [
+              {
+                "expr": "count(kube_node_info)",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+            "type": "stat",
+            "title": "Total Pods",
+            "targets": [
+              {
+                "expr": "sum(kube_pod_info)",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+            "type": "graph",
+            "title": "Node CPU Usage",
+            "targets": [
+              {
+                "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+                "legendFormat": "{{instance}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "percent",
+                "label": "CPU Usage",
+                "max": 100,
+                "min": 0
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+            "type": "graph",
+            "title": "Node Memory Usage",
+            "targets": [
+              {
+                "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+                "legendFormat": "{{instance}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "percent",
+                "label": "Memory Usage",
+                "max": 100,
+                "min": 0
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+            "type": "graph",
+            "title": "Pod Resource Usage by Namespace",
+            "targets": [
+              {
+                "expr": "sum by (namespace) (rate(container_cpu_usage_seconds_total{container!=\"\"}[5m]))",
+                "legendFormat": "{{namespace}} - CPU",
+                "refId": "A"
+              },
+              {
+                "expr": "sum by (namespace) (container_memory_working_set_bytes{container!=\"\"}) / 1024 / 1024 / 1024",
+                "legendFormat": "{{namespace}} - Memory (GB)",
+                "refId": "B",
+                "yaxis": 2
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "CPU Cores"
+              },
+              {
+                "format": "decbytes",
+                "label": "Memory"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  
+  database-monitoring.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "db-monitoring",
+        "title": "Database Monitoring",
+        "tags": ["database", "postgresql", "redis"],
+        "timezone": "browser",
+        "schemaVersion": 30,
+        "version": 1,
+        "refresh": "1m",
+        "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+            "type": "stat",
+            "title": "PostgreSQL Status",
+            "targets": [
+              {
+                "expr": "min(pg_up)",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [
+                  {"type": "value", "value": "0", "text": "DOWN"},
+                  {"type": "value", "value": "1", "text": "UP"}
+                ],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "green", "value": 1}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+            "type": "stat",
+            "title": "Active Connections",
+            "targets": [
+              {
+                "expr": "sum(pg_stat_database_numbackends)",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 150},
+                    {"color": "red", "value": 180}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+            "type": "stat",
+            "title": "Replication Lag",
+            "targets": [
+              {
+                "expr": "max(pg_replication_lag)",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "s",
+                "decimals": 1,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 10},
+                    {"color": "red", "value": 60}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+            "type": "stat",
+            "title": "Database Size",
+            "targets": [
+              {
+                "expr": "sum(pg_database_size_bytes) / 1024 / 1024 / 1024",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "GB",
+                "decimals": 2
+              }
+            }
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+            "type": "graph",
+            "title": "Database Queries/sec",
+            "targets": [
+              {
+                "expr": "sum(rate(pg_stat_database_xact_commit[5m])) + sum(rate(pg_stat_database_xact_rollback[5m]))",
+                "legendFormat": "Total QPS",
+                "refId": "A"
+              },
+              {
+                "expr": "sum(rate(pg_stat_database_xact_commit[5m]))",
+                "legendFormat": "Commits/sec",
+                "refId": "B"
+              },
+              {
+                "expr": "sum(rate(pg_stat_database_xact_rollback[5m]))",
+                "legendFormat": "Rollbacks/sec",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "ops",
+                "label": "Queries/sec"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+            "type": "graph",
+            "title": "Cache Hit Ratio",
+            "targets": [
+              {
+                "expr": "sum(pg_stat_database_blks_hit) / (sum(pg_stat_database_blks_hit) + sum(pg_stat_database_blks_read)) * 100",
+                "legendFormat": "PostgreSQL Cache Hit %",
+                "refId": "A"
+              },
+              {
+                "expr": "(sum(rate(redis_keyspace_hits_total[5m])) / (sum(rate(redis_keyspace_hits_total[5m])) + sum(rate(redis_keyspace_misses_total[5m])))) * 100",
+                "legendFormat": "Redis Cache Hit %",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "percent",
+                "label": "Hit Ratio",
+                "max": 100,
+                "min": 0
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+            "type": "graph",
+            "title": "Redis Operations",
+            "targets": [
+              {
+                "expr": "sum(rate(redis_commands_processed_total[5m]))",
+                "legendFormat": "Commands/sec",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "ops",
+                "label": "Operations/sec"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+            "type": "graph",
+            "title": "Redis Memory Usage",
+            "targets": [
+              {
+                "expr": "redis_memory_used_bytes / 1024 / 1024 / 1024",
+                "legendFormat": "{{instance}} - Used",
+                "refId": "A"
+              },
+              {
+                "expr": "redis_memory_max_bytes / 1024 / 1024 / 1024",
+                "legendFormat": "{{instance}} - Max",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "decbytes",
+                "label": "Memory"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          }
+        ]
+      }
+    }

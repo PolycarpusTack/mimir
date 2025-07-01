@@ -1,0 +1,186 @@
+{
+  "user_agent": "Mimir-AsyncScraper/1.0",
+  "database_name": "mimir_news.db",
+  
+  "logging": {
+    "level": "INFO",
+    "file": "logs/mimir_scraper.log",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "max_bytes": 10485760,
+    "backup_count": 5
+  },
+  
+  "notification_email": {
+    "send_email": true,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "your-email@gmail.com",
+    "smtp_password": "your-app-password",
+    "recipient_email": "recipient@example.com"
+  },
+  
+  "keywords_monitoring": {
+    "enabled": true,
+    "keywords": [
+      "artificial intelligence",
+      "machine learning",
+      "data science",
+      "Python",
+      "technology",
+      "breakthrough",
+      "innovation"
+    ]
+  },
+  
+  "_comment_epic4": "=== EPIC 4: Async Architecture Settings ===",
+  
+  "use_async_db": true,
+  "enable_cache": true,
+  "enable_events": true,
+  "use_resilience": true,
+  
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "db": 0,
+    "password": null
+  },
+  
+  "postgresql": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "mimir",
+    "user": "mimir",
+    "password": "mimir_password",
+    "min_pool_size": 5,
+    "max_pool_size": 20
+  },
+  
+  "_comment_async": "=== Async Scraper Configuration ===",
+  
+  "concurrent_requests": 20,
+  "request_timeout_seconds": 30,
+  "default_request_delay_seconds": 2,
+  "connector_limit": 100,
+  "connector_limit_per_host": 30,
+  
+  "_comment_cache": "=== Caching Configuration ===",
+  
+  "cache_ttl_seconds": 3600,
+  
+  "_comment_resilience": "=== Resilience Configuration ===",
+  
+  "circuit_breaker_threshold": 5,
+  "circuit_breaker_timeout": 60.0,
+  "max_retries": 3,
+  "retry_delay_seconds": 1.0,
+  "max_retry_delay": 30.0,
+  
+  "_comment_monitoring": "=== Monitoring Configuration ===",
+  
+  "resource_monitoring": {
+    "enabled": true,
+    "sample_interval": 1.0,
+    "max_history_size": 1000,
+    "cpu_threshold": 80.0,
+    "memory_threshold": 80.0,
+    "response_time_threshold": 10.0
+  },
+  
+  "_comment_cleanup": "=== Data Cleanup Configuration ===",
+  
+  "cleanup": {
+    "articles_days_to_keep": 90,
+    "scrape_runs_to_keep": 100,
+    "cache_cleanup_interval_hours": 24
+  },
+  
+  "_comment_security": "=== Security Configuration ===",
+  
+  "security": {
+    "enable_rate_limiting": true,
+    "max_requests_per_minute": 100,
+    "enable_input_validation": true,
+    "require_api_key": false,
+    "api_key": null,
+    "allowed_origins": ["localhost", "127.0.0.1"],
+    "enable_cors": true
+  },
+  
+  "_comment_performance": "=== Performance Tuning ===",
+  
+  "performance": {
+    "enable_compression": true,
+    "enable_keep_alive": true,
+    "connection_pool_size": 100,
+    "read_timeout": 30,
+    "connect_timeout": 10,
+    "total_timeout": 60
+  },
+  
+  "_comment_features": "=== Feature Flags ===",
+  
+  "features": {
+    "enable_ai_analysis": true,
+    "enable_semantic_search": false,
+    "enable_real_time_notifications": true,
+    "enable_web_interface": true,
+    "enable_api": true,
+    "enable_metrics_export": true
+  },
+  
+  "_comment_development": "=== Development Settings ===",
+  
+  "development": {
+    "debug_mode": false,
+    "enable_profiling": false,
+    "mock_external_services": false,
+    "log_sql_queries": false,
+    "enable_test_mode": false
+  },
+  
+  "_comment_environments": "=== Environment-Specific Overrides ===",
+  
+  "environments": {
+    "development": {
+      "logging": {
+        "level": "DEBUG"
+      },
+      "development": {
+        "debug_mode": true,
+        "enable_profiling": true
+      },
+      "concurrent_requests": 5,
+      "redis": {
+        "db": 1
+      }
+    },
+    "testing": {
+      "database_name": "mimir_test.db",
+      "development": {
+        "enable_test_mode": true,
+        "mock_external_services": true
+      },
+      "redis": {
+        "db": 2
+      },
+      "notification_email": {
+        "send_email": false
+      }
+    },
+    "production": {
+      "logging": {
+        "level": "WARNING"
+      },
+      "concurrent_requests": 50,
+      "security": {
+        "require_api_key": true,
+        "enable_rate_limiting": true
+      },
+      "performance": {
+        "enable_compression": true,
+        "connection_pool_size": 200
+      }
+    }
+  }
+}

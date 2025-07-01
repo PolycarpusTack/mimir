@@ -1,0 +1,508 @@
+# Grafana Dashboards for Mimir Application
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-mimir
+  namespace: mimir-monitoring
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/component: monitoring
+data:
+  mimir-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "mimir-overview",
+        "title": "Mimir Overview",
+        "tags": ["mimir", "overview"],
+        "timezone": "browser",
+        "schemaVersion": 30,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+            "type": "stat",
+            "title": "API Success Rate",
+            "targets": [
+              {
+                "expr": "mimir:api_success_rate",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 95},
+                    {"color": "green", "value": 99}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+            "type": "stat",
+            "title": "Total Articles",
+            "targets": [
+              {
+                "expr": "sum(mimir_articles_total)",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+            "type": "stat",
+            "title": "Articles/Hour",
+            "targets": [
+              {
+                "expr": "sum(rate(mimir_articles_scraped_total[1h])) * 3600",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+            "type": "stat",
+            "title": "Cache Hit Rate",
+            "targets": [
+              {
+                "expr": "mimir:cache_hit_ratio",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "green", "value": 85}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+            "type": "graph",
+            "title": "API Request Rate",
+            "targets": [
+              {
+                "expr": "sum by (method) (mimir:api_request_rate)",
+                "legendFormat": "{{method}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "reqps",
+                "label": "Requests/sec"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+            "type": "graph",
+            "title": "API Response Time",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.5, sum by (le) (rate(http_request_duration_seconds_bucket{app=\"mimir-api\"}[5m])))",
+                "legendFormat": "p50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{app=\"mimir-api\"}[5m])))",
+                "legendFormat": "p95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{app=\"mimir-api\"}[5m])))",
+                "legendFormat": "p99",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "s",
+                "label": "Response Time"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+            "type": "graph",
+            "title": "Worker Task Processing",
+            "targets": [
+              {
+                "expr": "sum by (task_type) (mimir:worker_tasks_processed_rate)",
+                "legendFormat": "{{task_type}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "ops",
+                "label": "Tasks/sec"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+            "type": "graph",
+            "title": "Database Connections",
+            "targets": [
+              {
+                "expr": "sum(pg_pool_connections_active)",
+                "legendFormat": "Active",
+                "refId": "A"
+              },
+              {
+                "expr": "sum(pg_pool_connections_idle)",
+                "legendFormat": "Idle",
+                "refId": "B"
+              },
+              {
+                "expr": "sum(pg_pool_connections_total)",
+                "legendFormat": "Total",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Connections"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  
+  mimir-scraping.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "mimir-scraping",
+        "title": "Mimir Scraping Performance",
+        "tags": ["mimir", "scraping"],
+        "timezone": "browser",
+        "schemaVersion": 30,
+        "version": 1,
+        "refresh": "1m",
+        "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0},
+            "type": "stat",
+            "title": "Scraping Success Rate",
+            "targets": [
+              {
+                "expr": "mimir:scraping_success_rate",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 80},
+                    {"color": "green", "value": 95}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 4, "w": 8, "x": 8, "y": 0},
+            "type": "stat",
+            "title": "Active Sources",
+            "targets": [
+              {
+                "expr": "count(sum by (source) (rate(mimir_scraper_attempts_total[1h])) > 0)",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "short",
+                "decimals": 0
+              }
+            }
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 4, "w": 8, "x": 16, "y": 0},
+            "type": "stat",
+            "title": "Avg Processing Time",
+            "targets": [
+              {
+                "expr": "mimir:article_processing_latency_p50",
+                "refId": "A"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "s",
+                "decimals": 2
+              }
+            }
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 10, "w": 24, "x": 0, "y": 4},
+            "type": "graph",
+            "title": "Articles Scraped by Source",
+            "targets": [
+              {
+                "expr": "sum by (source) (rate(mimir_articles_scraped_total[5m])) * 300",
+                "legendFormat": "{{source}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Articles/5min"
+              },
+              {
+                "format": "short"
+              }
+            ],
+            "stack": true,
+            "fill": 5
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 10, "w": 12, "x": 0, "y": 14},
+            "type": "graph",
+            "title": "Scraping Errors",
+            "targets": [
+              {
+                "expr": "sum by (source, error_type) (rate(mimir_scraper_errors_total[5m]))",
+                "legendFormat": "{{source}} - {{error_type}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Errors/sec"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "gridPos": {"h": 10, "w": 12, "x": 12, "y": 14},
+            "type": "heatmap",
+            "title": "Article Processing Latency Heatmap",
+            "targets": [
+              {
+                "expr": "sum by (le) (rate(mimir_article_processing_duration_seconds_bucket[5m]))",
+                "format": "heatmap",
+                "legendFormat": "{{le}}",
+                "refId": "A"
+              }
+            ],
+            "dataFormat": "timeseries",
+            "yAxis": {
+              "format": "s",
+              "decimals": 1
+            }
+          }
+        ]
+      }
+    }
+  
+  mimir-analytics.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "uid": "mimir-analytics",
+        "title": "Mimir Analytics & AI",
+        "tags": ["mimir", "analytics", "ai"],
+        "timezone": "browser",
+        "schemaVersion": 30,
+        "version": 1,
+        "refresh": "5m",
+        "panels": [
+          {
+            "id": 1,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+            "type": "graph",
+            "title": "Sentiment Analysis Distribution",
+            "targets": [
+              {
+                "expr": "sum by (sentiment) (mimir_sentiment_analysis_total)",
+                "legendFormat": "{{sentiment}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Articles"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+            "type": "graph",
+            "title": "Entity Extraction Performance",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum by (le) (rate(mimir_entity_extraction_duration_seconds_bucket[5m])))",
+                "legendFormat": "p95 Latency",
+                "refId": "A"
+              },
+              {
+                "expr": "sum(rate(mimir_entities_extracted_total[5m]))",
+                "legendFormat": "Entities/sec",
+                "refId": "B",
+                "yaxis": 2
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "s",
+                "label": "Latency"
+              },
+              {
+                "format": "short",
+                "label": "Entities/sec"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+            "type": "table",
+            "title": "Top Keywords",
+            "targets": [
+              {
+                "expr": "topk(20, sum by (keyword) (mimir_keyword_frequency_total))",
+                "format": "table",
+                "instant": true,
+                "refId": "A"
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {
+                    "Time": true
+                  },
+                  "renameByName": {
+                    "keyword": "Keyword",
+                    "Value": "Frequency"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+            "type": "graph",
+            "title": "ML Model Performance",
+            "targets": [
+              {
+                "expr": "sum by (model) (rate(mimir_ml_predictions_total[5m]))",
+                "legendFormat": "{{model}} predictions/sec",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "ops",
+                "label": "Predictions/sec"
+              },
+              {
+                "format": "short"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+            "type": "graph",
+            "title": "Analytics Queue Length",
+            "targets": [
+              {
+                "expr": "mimir_analytics_queue_length",
+                "legendFormat": "Queue Length",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(mimir_analytics_processed_total[5m])",
+                "legendFormat": "Processing Rate",
+                "refId": "B",
+                "yaxis": 2
+              }
+            ],
+            "yaxes": [
+              {
+                "format": "short",
+                "label": "Queue Length"
+              },
+              {
+                "format": "ops",
+                "label": "Processing Rate"
+              }
+            ]
+          }
+        ]
+      }
+    }

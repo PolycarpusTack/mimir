@@ -1,0 +1,260 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-worker-service
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: mimir
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for workers
+  ports:
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  selector:
+    app.kubernetes.io/name: mimir-worker
+    app.kubernetes.io/component: worker
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-worker
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: mimir
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mimir-worker
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mimir-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: mimir
+        app.kubernetes.io/version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: mimir-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      initContainers:
+      - name: wait-for-dependencies
+        image: busybox:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - |
+          until nc -z postgres-service 5432 && nc -z redis-service 6379; do
+            echo "Waiting for dependencies..."
+            sleep 2
+          done
+          echo "Dependencies are ready"
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+      containers:
+      - name: mimir-worker
+        image: {{ .Values.image.registry }}/mimir:worker-{{ .Values.image.tag }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - celery
+        - -A
+        - celery_app
+        - worker
+        - --loglevel=info
+        - --concurrency=4
+        - --max-tasks-per-child=1000
+        - --prefetch-multiplier=1
+        - --pool=prefork
+        - --queues=default,scraping,analytics
+        - --heartbeat-interval=10
+        - --without-gossip
+        - --without-mingle
+        ports:
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: mimir-config
+        - secretRef:
+            name: mimir-secrets
+        env:
+        - name: SERVICE_TYPE
+          value: "worker"
+        - name: C_FORCE_ROOT
+          value: "false"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: CELERY_HOSTNAME
+          value: "$(POD_NAME)"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "4"
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - celery -A celery_app inspect ping -d celery@$(POD_NAME)
+          initialDelaySeconds: 120
+          periodSeconds: 60
+          timeoutSeconds: 30
+          failureThreshold: 3
+          successThreshold: 1
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - celery -A celery_app inspect active -d celery@$(POD_NAME)
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 3
+          successThreshold: 1
+        startupProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - celery -A celery_app inspect registered -d celery@$(POD_NAME)
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 30
+          successThreshold: 1
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+        - name: data
+          mountPath: /app/data
+        - name: nltk-data
+          mountPath: /home/mimir/nltk_data
+        - name: cache
+          mountPath: /home/mimir/.cache
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      - name: data
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: nltk-data
+        emptyDir: {}
+      - name: cache
+        emptyDir:
+          sizeLimit: 5Gi
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-worker
+            app.kubernetes.io/component: worker
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: mimir-worker
+            app.kubernetes.io/component: worker
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/name
+                  operator: In
+                  values:
+                  - mimir-worker
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 50
+            preference:
+              matchExpressions:
+              - key: workload-type
+                operator: In
+                values:
+                - compute-optimized
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mimir-worker
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: mimir
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mimir-worker-pdb
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir-worker
+    app.kubernetes.io/component: worker
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mimir-worker
+      app.kubernetes.io/component: worker

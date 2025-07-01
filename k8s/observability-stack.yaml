@@ -1,0 +1,394 @@
+# Complete Observability Stack Integration
+# Combines monitoring, logging, and tracing into unified observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: observability-integration
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: observability
+data:
+  integration-guide.md: |
+    # Mimir Observability Stack Integration
+    
+    ## Architecture Overview
+    
+    The complete observability stack provides three pillars of monitoring:
+    
+    1. **Metrics** (Prometheus + Grafana)
+       - System and application metrics
+       - Real-time dashboards
+       - Alerting and notifications
+    
+    2. **Logs** (ELK Stack)
+       - Structured application logs
+       - Centralized log aggregation
+       - Log analysis and search
+    
+    3. **Traces** (Jaeger)
+       - Distributed request tracing
+       - Performance analysis
+       - Error tracking
+    
+    ## Data Flow
+    
+    ```
+    Application
+    ├── Metrics → Prometheus → Grafana
+    ├── Logs → Filebeat → Logstash → Elasticsearch → Kibana
+    └── Traces → Jaeger Agent → Jaeger Collector → Elasticsearch → Jaeger UI
+    ```
+    
+    ## Cross-Stack Correlation
+    
+    ### Trace ID in Logs
+    Include trace IDs in log entries for correlation:
+    ```json
+    {
+      "timestamp": "2024-01-19T12:00:00Z",
+      "level": "INFO",
+      "message": "Processing article",
+      "trace_id": "abc123def456",
+      "span_id": "789ghi012",
+      "service": "mimir-api"
+    }
+    ```
+    
+    ### Metrics from Traces
+    Generate metrics from trace data:
+    - Request rate: spans per second
+    - Error rate: error spans / total spans
+    - Latency percentiles: span duration distribution
+    
+    ### Log Links in Traces
+    Link from trace spans to relevant logs:
+    - Add log URLs to span attributes
+    - Include request IDs in both traces and logs
+    
+    ## Unified Dashboard Links
+    
+    From any observability tool, you can navigate to others:
+    - **Grafana → Jaeger**: Click service name to see traces
+    - **Grafana → Kibana**: Click error count to see logs
+    - **Jaeger → Kibana**: Click trace to see related logs
+    - **Kibana → Jaeger**: Click request ID to see trace
+    
+    ## Alert Correlation
+    
+    Alerts from different systems reference the same incidents:
+    - High error rate (Prometheus) + Error logs (ELK) + Failed traces (Jaeger)
+    - All alerts include correlation IDs for incident tracking
+  
+  correlation-examples.py: |
+    """
+    Examples of cross-stack correlation in Mimir applications
+    """
+    import logging
+    import json
+    from opentelemetry import trace
+    from prometheus_client import Counter, Histogram
+    from datetime import datetime
+    
+    # Metrics
+    request_counter = Counter('http_requests_total', 'Total requests', ['method', 'endpoint', 'status'])
+    request_duration = Histogram('http_request_duration_seconds', 'Request duration')
+    
+    # Logger
+    logger = logging.getLogger(__name__)
+    
+    class CorrelatedRequest:
+        """Example of correlated request handling"""
+        
+        def __init__(self, request_id: str = None):
+            self.request_id = request_id or self._generate_request_id()
+            self.start_time = datetime.utcnow()
+            
+        def _generate_request_id(self) -> str:
+            import uuid
+            return str(uuid.uuid4())
+        
+        def process_request(self, endpoint: str, method: str):
+            """Process request with full observability"""
+            
+            # Start trace span
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span("http.request") as span:
+                
+                # Add trace attributes
+                span.set_attribute("http.method", method)
+                span.set_attribute("http.url", endpoint)
+                span.set_attribute("request.id", self.request_id)
+                
+                # Get trace context for logging
+                trace_id = format(span.get_span_context().trace_id, "032x")
+                span_id = format(span.get_span_context().span_id, "016x")
+                
+                try:
+                    # Log request start with trace context
+                    logger.info("Request started", extra={
+                        "event": "request_start",
+                        "request_id": self.request_id,
+                        "trace_id": trace_id,
+                        "span_id": span_id,
+                        "method": method,
+                        "endpoint": endpoint
+                    })
+                    
+                    # Process request (simulate)
+                    result = self._simulate_processing(span)
+                    
+                    # Record success metrics
+                    request_counter.labels(
+                        method=method,
+                        endpoint=endpoint,
+                        status="200"
+                    ).inc()
+                    
+                    # Log success
+                    logger.info("Request completed", extra={
+                        "event": "request_complete",
+                        "request_id": self.request_id,
+                        "trace_id": trace_id,
+                        "span_id": span_id,
+                        "status": "success",
+                        "duration_ms": (datetime.utcnow() - self.start_time).total_seconds() * 1000
+                    })
+                    
+                    return result
+                    
+                except Exception as e:
+                    # Record error metrics
+                    request_counter.labels(
+                        method=method,
+                        endpoint=endpoint,
+                        status="500"
+                    ).inc()
+                    
+                    # Record exception in trace
+                    span.record_exception(e)
+                    span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                    
+                    # Log error with full context
+                    logger.error("Request failed", extra={
+                        "event": "request_error",
+                        "request_id": self.request_id,
+                        "trace_id": trace_id,
+                        "span_id": span_id,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "stack_trace": traceback.format_exc()
+                    }, exc_info=True)
+                    
+                    raise
+                    
+                finally:
+                    # Record duration metric
+                    duration = (datetime.utcnow() - self.start_time).total_seconds()
+                    request_duration.observe(duration)
+        
+        def _simulate_processing(self, parent_span):
+            """Simulate request processing with nested spans"""
+            
+            tracer = trace.get_tracer(__name__)
+            
+            # Database operation
+            with tracer.start_as_current_span("database.query") as span:
+                span.set_attribute("db.operation", "SELECT")
+                span.set_attribute("db.table", "articles")
+                
+                # Simulate database query
+                import time
+                time.sleep(0.1)
+                
+                logger.info("Database query executed", extra={
+                    "event": "database_query",
+                    "request_id": self.request_id,
+                    "table": "articles",
+                    "rows_returned": 25
+                })
+            
+            # External API call
+            with tracer.start_as_current_span("external.api") as span:
+                span.set_attribute("external.service", "news_api")
+                span.set_attribute("external.endpoint", "/articles")
+                
+                # Simulate API call
+                time.sleep(0.05)
+                
+                logger.info("External API called", extra={
+                    "event": "external_api_call",
+                    "request_id": self.request_id,
+                    "service": "news_api",
+                    "response_time_ms": 50
+                })
+            
+            return {"status": "success", "request_id": self.request_id}
+  
+  dashboard-urls.json: |
+    {
+      "observability_urls": {
+        "metrics": {
+          "prometheus": "http://prometheus.mimir-monitoring:9090",
+          "grafana": "https://grafana.example.com",
+          "dashboards": {
+            "overview": "https://grafana.example.com/d/mimir-overview",
+            "api": "https://grafana.example.com/d/mimir-api",
+            "infrastructure": "https://grafana.example.com/d/k8s-cluster"
+          }
+        },
+        "logs": {
+          "elasticsearch": "https://elasticsearch.mimir-logging:9200",
+          "kibana": "https://kibana.example.com",
+          "search_templates": {
+            "errors": "https://kibana.example.com/app/discover#/?_g=(filters:!(),time:(from:now-1h,to:now))&_a=(filters:!(('$state':(store:appState),meta:(disabled:!f,key:level,negate:!f,type:phrase),query:(match:(level:(query:ERROR,type:phrase))))),index:'mimir-*')",
+            "request_logs": "https://kibana.example.com/app/discover#/?_g=(filters:!(),time:(from:now-1h,to:now))&_a=(filters:!(('$state':(store:appState),meta:(disabled:!f,key:request_id,negate:!f,type:phrase),query:(match:(request_id:(query:'#{request_id}',type:phrase))))),index:'mimir-*')"
+          }
+        },
+        "traces": {
+          "jaeger": "https://jaeger.example.com",
+          "search_templates": {
+            "service_traces": "https://jaeger.example.com/search?service=#{service}&start=#{start_time}&end=#{end_time}",
+            "trace_by_id": "https://jaeger.example.com/trace/#{trace_id}",
+            "operation_traces": "https://jaeger.example.com/search?service=#{service}&operation=#{operation}"
+          }
+        }
+      },
+      "correlation_patterns": {
+        "trace_to_logs": {
+          "url_template": "https://kibana.example.com/app/discover#/?_g=(filters:!(),time:(from:now-1h,to:now))&_a=(filters:!(('$state':(store:appState),meta:(disabled:!f,key:trace_id,negate:!f,type:phrase),query:(match:(trace_id:(query:'#{trace_id}',type:phrase))))),index:'mimir-*')",
+          "description": "View logs for a specific trace"
+        },
+        "logs_to_trace": {
+          "url_template": "https://jaeger.example.com/trace/#{trace_id}",
+          "description": "View trace for a log entry"
+        },
+        "metric_to_traces": {
+          "url_template": "https://jaeger.example.com/search?service=#{service}&start=#{start_time}&end=#{end_time}&tags={\"error\":\"true\"}",
+          "description": "View error traces when metrics show high error rate"
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: observability-troubleshooting
+  namespace: mimir
+  labels:
+    app.kubernetes.io/name: mimir
+    app.kubernetes.io/component: observability
+data:
+  troubleshooting-guide.md: |
+    # Observability Troubleshooting Guide
+    
+    ## Common Investigation Workflows
+    
+    ### 1. High Error Rate Alert
+    
+    **Alert**: Prometheus reports high error rate for mimir-api
+    
+    **Investigation Steps**:
+    1. **Grafana**: Check API dashboard for error rate trends
+    2. **Jaeger**: Search for error traces in the time window
+    3. **Kibana**: Filter logs by ERROR level for the service
+    4. **Correlation**: Use request IDs to link traces and logs
+    
+    **Example Queries**:
+    ```
+    # Prometheus
+    rate(http_requests_total{service="mimir-api",status=~"5.."}[5m])
+    
+    # Kibana
+    service:"mimir-api" AND level:"ERROR" AND @timestamp:[now-1h TO now]
+    
+    # Jaeger
+    service=mimir-api tags.error=true
+    ```
+    
+    ### 2. High Latency Investigation
+    
+    **Alert**: P95 latency > 2 seconds
+    
+    **Investigation Steps**:
+    1. **Grafana**: Check latency percentiles over time
+    2. **Jaeger**: Find slow traces (duration > 2s)
+    3. **Trace Analysis**: Identify bottleneck spans
+    4. **Logs**: Check for related error messages
+    
+    ### 3. Service Dependency Issues
+    
+    **Symptom**: Service A errors correlate with Service B latency
+    
+    **Investigation Steps**:
+    1. **Jaeger**: View service dependency graph
+    2. **Traces**: Find cross-service spans with errors
+    3. **Metrics**: Compare service performance metrics
+    4. **Logs**: Check network/connection errors
+    
+    ## Correlation Techniques
+    
+    ### Using Request IDs
+    1. Get request ID from error logs
+    2. Search traces by request ID
+    3. Follow trace through all services
+    4. Identify failure point
+    
+    ### Using Trace IDs
+    1. Find problematic trace in Jaeger
+    2. Copy trace ID
+    3. Search logs for same trace ID
+    4. Get detailed error context
+    
+    ### Using Time Windows
+    1. Identify problem time window from metrics
+    2. Search traces in that window
+    3. Filter logs by same time range
+    4. Correlate events across systems
+    
+    ## Performance Analysis
+    
+    ### Database Bottlenecks
+    ```
+    # Find slow database queries
+    Jaeger: operation=~"database.*" duration>500ms
+    Logs: message:"slow query" OR duration_ms:>500
+    Metrics: histogram_quantile(0.95, postgresql_query_duration_seconds_bucket)
+    ```
+    
+    ### Cache Efficiency
+    ```
+    # Check cache hit rates
+    Metrics: redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total)
+    Traces: operation=~"cache.*" tags.cache_hit=false
+    Logs: event:"cache_miss"
+    ```
+    
+    ### External API Issues
+    ```
+    # External service problems
+    Traces: operation=~"external.*" tags.http.status_code>=400
+    Logs: service:"external_api" AND (level:"ERROR" OR level:"WARN")
+    Metrics: external_api_requests_total{status=~"4..|5.."}
+    ```
+    
+    ## Alerting Best Practices
+    
+    ### Alert Correlation
+    - Include trace/request IDs in alert descriptions
+    - Link to relevant dashboards and search queries
+    - Set up alert dependencies (don't alert on symptoms)
+    
+    ### Runbook Integration
+    - Every alert should have a runbook link
+    - Include investigation queries for each tool
+    - Document common root causes and solutions
+    
+    ## Tools and URLs
+    
+    - **Grafana**: https://grafana.example.com
+    - **Kibana**: https://kibana.example.com
+    - **Jaeger**: https://jaeger.example.com
+    - **Prometheus**: http://prometheus.mimir-monitoring:9090
+    - **Alertmanager**: http://alertmanager.mimir-monitoring:9093
