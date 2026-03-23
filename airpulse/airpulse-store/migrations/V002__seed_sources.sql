@@ -47,5 +47,15 @@ INSERT INTO airpulse.feed_sources (name, url, tier, domain_hints, poll_interval_
 ('TV Technology', 'https://www.tvtechnology.com/rss.xml', 'Tier2', ARRAY['Broadcast'], 1800),
 ('Install Pro', 'https://www.installpro.co.uk/feed/', 'Tier2', ARRAY['Broadcast'], 1800),
 ('MediaPost', 'https://www.mediapost.com/rss/', 'Tier2', ARRAY['Adtech','OTT'], 1800),
-('Digiday', 'https://digiday.com/feed/', 'Tier2', ARRAY['Adtech','OTT'], 1800)
+('Digiday', 'https://digiday.com/feed/', 'Tier2', ARRAY['Adtech','OTT'], 1800),
+('Videonet', 'https://www.v-net.tv/feed/', 'Tier2', ARRAY['OTT','Broadcast','Adtech'], 1800),
+('Telecompaper', 'https://www.telecompaper.com/rss', 'Tier2', ARRAY['OTT','Cloud'], 1800),
+('Content Europe', 'https://www.contenteurope.com/feed/', 'Tier2', ARRAY['OTT','Broadcast'], 1800),
+('Mediakind Blog', 'https://www.mediakind.com/blog/feed/', 'Tier2', ARRAY['Broadcast','Cloud','OTT'], 1800),
+('Imagine Communications Blog', 'https://www.imaginecommunications.com/blog/feed', 'Tier2', ARRAY['Broadcast','Cloud','Adtech'], 1800),
+('Ateme Blog', 'https://www.ateme.com/blog/feed/', 'Tier2', ARRAY['OTT','Cloud'], 1800),
+('Grass Valley Blog', 'https://www.grassvalley.com/blog/feed/', 'Tier2', ARRAY['Broadcast','Cloud'], 1800),
+('Vizrt Blog', 'https://www.vizrt.com/blog/feed/', 'Tier2', ARRAY['Broadcast','AI'], 1800),
+('Evertz Blog', 'https://www.evertz.com/blog/feed/', 'Tier2', ARRAY['Broadcast','Cloud'], 1800),
+('Ross Video Blog', 'https://www.rossvideo.com/blog/feed/', 'Tier2', ARRAY['Broadcast'], 1800)
 ON CONFLICT (url) DO NOTHING;

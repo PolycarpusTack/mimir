@@ -1,17 +1,20 @@
 use airpulse_classify::ClassificationPipeline;
 use airpulse_store::SignalStore;
 use airpulse_types::{
-    AggregatorHealth, FeedSource, HealthStatus, IngestError, PollEvent, PollResult,
+    AggregatorHealth, FeedSource, HealthStatus, IngestError, NormalisedItem, PollEvent, PollResult,
 };
 use chrono::Utc;
 use std::sync::Arc;
-use tokio::sync::Semaphore;
+use tokio::sync::{broadcast, Semaphore};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::circuit::CircuitBreaker;
 use crate::dedup::DedupFilter;
 use crate::poller::FeedPoller;
+
+/// Default channel capacity per §5.1.1.
+const DEFAULT_CHANNEL_CAPACITY: usize = 1024;
 
 /// The main feed aggregator/scheduler.
 pub struct FeedScheduler {
@@ -21,6 +24,8 @@ pub struct FeedScheduler {
     classifier: Arc<ClassificationPipeline>,
     store: SignalStore,
     concurrency: Arc<Semaphore>,
+    /// Broadcast channel for streaming normalised items to subscribers (§5.1.2).
+    item_tx: broadcast::Sender<NormalisedItem>,
 }
 
 impl FeedScheduler {
@@ -32,6 +37,8 @@ impl FeedScheduler {
         store: SignalStore,
         max_concurrent: usize,
     ) -> Self {
+        let (item_tx, _) = broadcast::channel(DEFAULT_CHANNEL_CAPACITY);
+
         Self {
             poller,
             circuit_breaker,
@@ -39,7 +46,15 @@ impl FeedScheduler {
             classifier,
             store,
             concurrency: Arc::new(Semaphore::new(max_concurrent)),
+            item_tx,
         }
+    }
+
+    /// Subscribe to the stream of normalised items (§5.1.2).
+    /// Returns a receiver that yields each NormalisedItem after normalisation
+    /// but before dedup/classification.
+    pub fn subscribe(&self) -> broadcast::Receiver<NormalisedItem> {
+        self.item_tx.subscribe()
     }
 
     /// Force poll a single source.
@@ -57,6 +72,9 @@ impl FeedScheduler {
                 let mut items_dedup = 0i32;
 
                 for item in items {
+                    // Emit to subscribers (best-effort, ignore if no subscribers)
+                    let _ = self.item_tx.send(item.clone());
+
                     let is_dup = self.dedup.is_duplicate(&item).await.unwrap_or(false);
 
                     if is_dup {
@@ -67,15 +85,13 @@ impl FeedScheduler {
                     // Classify
                     match self.classifier.classify(item.clone()) {
                         Ok(classified) => {
-                            // Mark as seen in bloom filter
                             let _ = self.dedup.mark_seen(&item).await;
 
-                            // Store
                             match self.store.insert_signal(classified).await {
                                 Ok(_) => items_new += 1,
                                 Err(e) => {
                                     warn!("Failed to store signal: {e}");
-                                    items_dedup += 1; // Likely duplicate
+                                    items_dedup += 1;
                                 }
                             }
                         }
@@ -85,7 +101,6 @@ impl FeedScheduler {
                     }
                 }
 
-                // Record success
                 self.circuit_breaker.record_success(source.id);
 
                 let event = PollEvent {
@@ -194,7 +209,7 @@ impl FeedScheduler {
             sources_live,
             sources_open: open,
             sources_half_open: half_open,
-            queue_depth: 0, // TODO: track via channel
+            queue_depth: self.item_tx.len() as u32,
             polls_last_hour: 0,
             errors_last_hour: 0,
             status,

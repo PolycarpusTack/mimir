@@ -42,7 +42,6 @@ impl SignalStore {
 
     /// Run migrations.
     pub async fn run_migrations(&self) -> Result<(), StoreError> {
-        // Read and execute migration files
         let schema_sql = include_str!("../migrations/V001__create_schema.sql");
         sqlx::raw_sql(schema_sql)
             .execute(&self.pool)
@@ -182,35 +181,141 @@ impl SignalStore {
         }
     }
 
-    /// List signals with query parameters.
+    /// List signals with query parameters supporting domain, signal type,
+    /// time range, confidence, and enrichment filters.
     pub async fn list_signals(&self, query: SignalQuery) -> Result<SignalPage, StoreError> {
         let page = query.effective_page();
         let page_size = query.effective_page_size();
         let offset = (page - 1) * page_size;
 
-        let count_row = sqlx::query("SELECT COUNT(*) as cnt FROM airpulse.signals")
+        // Build dynamic WHERE clauses with parameter binding indices.
+        // We start at $1 and increment for each bound parameter.
+        let mut conditions: Vec<String> = Vec::new();
+        let mut param_idx = 0u32;
+
+        // Domain filter (uses GIN index via array overlap)
+        let domain_strs: Vec<String> = query
+            .domains
+            .iter()
+            .map(|d| d.as_str().to_string())
+            .collect();
+        if !domain_strs.is_empty() {
+            param_idx += 1;
+            conditions.push(format!("domains && ${param_idx}::text[]"));
+        }
+
+        // Signal type filter
+        let signal_type_strs: Vec<String> = query
+            .signal_types
+            .iter()
+            .map(|st| st.as_str().to_string())
+            .collect();
+        if !signal_type_strs.is_empty() {
+            param_idx += 1;
+            // Use ANY($N) for signal_type IN (...)
+            conditions.push(format!("signal_type = ANY(${param_idx}::text[])"));
+        }
+
+        // After timestamp
+        if query.after.is_some() {
+            param_idx += 1;
+            conditions.push(format!("published_at > ${param_idx}"));
+        }
+
+        // Before timestamp
+        if query.before.is_some() {
+            param_idx += 1;
+            conditions.push(format!("published_at < ${param_idx}"));
+        }
+
+        // Source ID filter
+        let source_id_strs: Vec<Uuid> = query.source_ids.clone();
+        if !source_id_strs.is_empty() {
+            param_idx += 1;
+            conditions.push(format!("source_id = ANY(${param_idx}::uuid[])"));
+        }
+
+        // Minimum confidence
+        if query.min_confidence > 0.0 {
+            param_idx += 1;
+            conditions.push(format!("confidence_score >= ${param_idx}"));
+        }
+
+        // Enriched only
+        if query.enriched_only {
+            conditions.push("enriched = true".to_string());
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        // LIMIT and OFFSET params are always last
+        let limit_idx = param_idx + 1;
+        let offset_idx = param_idx + 2;
+
+        let count_sql = format!("SELECT COUNT(*) as cnt FROM airpulse.signals {where_clause}");
+        let list_sql = format!(
+            "SELECT id, source_id, url, title, summary, published_at, fetched_at, \
+             content_hash, domains, signal_type, confidence_score, relevance_score, \
+             enriched, archived, created_at \
+             FROM airpulse.signals {where_clause} \
+             ORDER BY published_at DESC \
+             LIMIT ${limit_idx} OFFSET ${offset_idx}"
+        );
+
+        // Helper macro-like: bind all filter params in the same order for both queries.
+        // We use sqlx::query and bind dynamically.
+        let mut count_query = sqlx::query(&count_sql);
+        let mut list_query = sqlx::query(&list_sql);
+
+        // Bind in the exact order conditions were added
+        if !domain_strs.is_empty() {
+            count_query = count_query.bind(&domain_strs);
+            list_query = list_query.bind(&domain_strs);
+        }
+        if !signal_type_strs.is_empty() {
+            count_query = count_query.bind(&signal_type_strs);
+            list_query = list_query.bind(&signal_type_strs);
+        }
+        if let Some(after) = query.after {
+            count_query = count_query.bind(after);
+            list_query = list_query.bind(after);
+        }
+        if let Some(before) = query.before {
+            count_query = count_query.bind(before);
+            list_query = list_query.bind(before);
+        }
+        if !source_id_strs.is_empty() {
+            count_query = count_query.bind(&source_id_strs);
+            list_query = list_query.bind(&source_id_strs);
+        }
+        if query.min_confidence > 0.0 {
+            count_query = count_query.bind(query.min_confidence);
+            list_query = list_query.bind(query.min_confidence);
+        }
+
+        // Bind LIMIT and OFFSET (only on list query)
+        list_query = list_query.bind(page_size as i64).bind(offset as i64);
+
+        let count_row = count_query
             .fetch_one(&self.pool)
             .await
             .map_err(|e| StoreError::Database(e.to_string()))?;
 
         let total_count: i64 = count_row.get("cnt");
-        let total_pages = ((total_count as f64) / (page_size as f64)).ceil() as u32;
+        let total_pages = if total_count == 0 {
+            0
+        } else {
+            ((total_count as f64) / (page_size as f64)).ceil() as u32
+        };
 
-        let rows = sqlx::query(
-            r#"
-            SELECT id, source_id, url, title, summary, published_at, fetched_at,
-                content_hash, domains, signal_type, confidence_score, relevance_score,
-                enriched, archived, created_at
-            FROM airpulse.signals
-            ORDER BY published_at DESC
-            LIMIT $1 OFFSET $2
-            "#,
-        )
-        .bind(page_size as i64)
-        .bind(offset as i64)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| StoreError::Database(e.to_string()))?;
+        let rows = list_query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
 
         let mut items = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -342,6 +447,29 @@ impl SignalStore {
                 (st, cnt)
             })
             .collect())
+    }
+
+    /// Get dedup stats from database.
+    pub async fn get_dedup_rate(&self) -> Result<f64, StoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                COALESCE(SUM(items_dedup), 0) as total_dedup,
+                COALESCE(SUM(items_new), 0) as total_new
+            FROM airpulse.poll_events
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        let dedup: i64 = row.get("total_dedup");
+        let new: i64 = row.get("total_new");
+        let total = dedup + new;
+        if total == 0 {
+            return Ok(0.0);
+        }
+        Ok(dedup as f64 / total as f64)
     }
 
     /// Get poll event stats for health monitoring.
