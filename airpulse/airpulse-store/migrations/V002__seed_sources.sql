@@ -1,0 +1,51 @@
+-- V002: Seed the 52 Tier 1 and Tier 2 feed sources
+
+-- Tier 1 — Wire & Major Trade Press (poll every 15 min = 900s)
+INSERT INTO airpulse.feed_sources (name, url, tier, domain_hints, poll_interval_secs) VALUES
+('IBC365', 'https://www.ibc.org/rss', 'Tier1', ARRAY['Broadcast','OTT','AI','Cloud'], 900),
+('TVBEurope', 'https://www.tvbeurope.com/feed', 'Tier1', ARRAY['Broadcast','OTT'], 900),
+('The Broadcast Bridge', 'https://www.thebroadcastbridge.com/rss', 'Tier1', ARRAY['Broadcast','Cloud'], 900),
+('SVG', 'https://www.sportsvideo.org/feed/', 'Tier1', ARRAY['Sports','Broadcast'], 900),
+('SVG Europe', 'https://www.svgeurope.org/feed/', 'Tier1', ARRAY['Sports','Broadcast'], 900),
+('Streaming Media', 'https://www.streamingmedia.com/rss/Articles.aspx', 'Tier1', ARRAY['OTT','AI','Cloud'], 900),
+('Advanced Television', 'https://advanced-television.com/feed/', 'Tier1', ARRAY['OTT','Broadcast','Sports'], 900),
+('Digital TV Europe', 'https://www.digitaltveurope.com/feed/', 'Tier1', ARRAY['OTT','Broadcast','Adtech'], 900),
+('TVNewsCheck', 'https://tvnewscheck.com/feed/', 'Tier1', ARRAY['Broadcast','Adtech'], 900),
+('Rapid TV News', 'https://www.rapidtvnews.com/rss.xml', 'Tier1', ARRAY['OTT','Broadcast','Sports'], 900)
+ON CONFLICT (url) DO NOTHING;
+
+-- Tier 2 — Vertical Specialists (poll every 30 min = 1800s)
+INSERT INTO airpulse.feed_sources (name, url, tier, domain_hints, poll_interval_secs) VALUES
+('SportsPro Media', 'https://www.sportspromedia.com/feed/', 'Tier2', ARRAY['Sports'], 1800),
+('AdExchanger', 'https://www.adexchanger.com/feed/', 'Tier2', ARRAY['Adtech'], 1800),
+('Cynopsis Media', 'https://www.cynopsis.com/feed/', 'Tier2', ARRAY['OTT','Adtech','Broadcast'], 1800),
+('Broadband TV News', 'https://www.broadbandtvnews.com/feed/', 'Tier2', ARRAY['OTT'], 1800),
+('AIB', 'https://aib.org.uk/feed/', 'Tier2', ARRAY['AI','Broadcast'], 1800),
+('EBU Tech & Innovation', 'https://tech.ebu.ch/rss', 'Tier2', ARRAY['Broadcast','AI'], 1800),
+('SMPTE News', 'https://www.smpte.org/feed', 'Tier2', ARRAY['Broadcast'], 1800),
+('DVB Project News', 'https://dvb.org/news/feed/', 'Tier2', ARRAY['OTT','Broadcast'], 1800),
+('HbbTV Association', 'https://www.hbbtv.org/feed/', 'Tier2', ARRAY['OTT','Broadcast'], 1800),
+('SCTE / ANSCA', 'https://www.scte.org/feed/', 'Tier2', ARRAY['Adtech','Broadcast'], 1800),
+('AWS Media Blog', 'https://aws.amazon.com/blogs/media/feed/', 'Tier2', ARRAY['Cloud','AI'], 1800),
+('Azure Media Blog', 'https://techcommunity.microsoft.com/t5/azure-media-services/bg-p/AzureMediaServicesBlog/label-name/rss', 'Tier2', ARRAY['Cloud'], 1800),
+('Google Cloud Media Blog', 'https://cloud.google.com/blog/products/media-entertainment/rss', 'Tier2', ARRAY['Cloud','AI'], 1800),
+('Harmonic Blog', 'https://www.harmonicinc.com/blog/feed/', 'Tier2', ARRAY['Broadcast','Cloud'], 1800),
+('Bitmovin Blog', 'https://bitmovin.com/blog/feed/', 'Tier2', ARRAY['OTT','Cloud'], 1800),
+('Mux Blog', 'https://mux.com/blog/rss.xml', 'Tier2', ARRAY['OTT','Cloud'], 1800),
+('FreeWheel Blog', 'https://www.freewheel.com/blog/feed', 'Tier2', ARRAY['Adtech'], 1800),
+('Magnite Blog', 'https://www.magnite.com/blog/feed/', 'Tier2', ARRAY['Adtech','OTT'], 1800),
+('The Trade Desk Blog', 'https://www.thetradedesk.com/us/blog/rss', 'Tier2', ARRAY['Adtech','OTT'], 1800),
+('NextTV', 'https://www.nexttv.com/rss.xml', 'Tier2', ARRAY['OTT','Broadcast'], 1800),
+('Variety', 'https://variety.com/feed/', 'Tier2', ARRAY['OTT','Broadcast','Sports'], 1800),
+('The Hollywood Reporter', 'https://www.hollywoodreporter.com/feed/', 'Tier2', ARRAY['OTT','Broadcast'], 1800),
+('Fierce Video', 'https://www.fiercevideo.com/rss/xml', 'Tier2', ARRAY['OTT','Broadcast','Cloud'], 1800),
+('Light Reading', 'https://www.lightreading.com/rss.xml', 'Tier2', ARRAY['Cloud','OTT'], 1800),
+('TechCrunch Media', 'https://techcrunch.com/category/media-entertainment/feed/', 'Tier2', ARRAY['AI','OTT','Cloud'], 1800),
+('Broadcast Now', 'https://www.broadcastnow.co.uk/rss', 'Tier2', ARRAY['Broadcast','OTT'], 1800),
+('CSI Magazine', 'https://www.csimagazine.com/csi/rss.php', 'Tier2', ARRAY['OTT','Broadcast','Cloud'], 1800),
+('VidTech', 'https://vidtech.com/feed/', 'Tier2', ARRAY['OTT','Cloud'], 1800),
+('TV Technology', 'https://www.tvtechnology.com/rss.xml', 'Tier2', ARRAY['Broadcast'], 1800),
+('Install Pro', 'https://www.installpro.co.uk/feed/', 'Tier2', ARRAY['Broadcast'], 1800),
+('MediaPost', 'https://www.mediapost.com/rss/', 'Tier2', ARRAY['Adtech','OTT'], 1800),
+('Digiday', 'https://digiday.com/feed/', 'Tier2', ARRAY['Adtech','OTT'], 1800)
+ON CONFLICT (url) DO NOTHING;

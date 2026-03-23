@@ -39,6 +39,10 @@ Thumbs.db
 *.temp
 *.bak
 
+# Rust
+target/
+airpulse/target/
+
 # Test output
 htmlcov/
 .coverage

@@ -1,0 +1,180 @@
+# Signal type classification patterns for AirPulse.
+# Each signal type has a weight and a list of regex patterns.
+# First match wins as primary signal_type; secondary matches
+# are recorded in keyword_hits.
+
+[product_launch]
+weight = 1.5
+patterns = [
+    "launches?",
+    "releases?",
+    "ships?",
+    "announces? (?:new|general availability|GA)",
+    "generally available",
+    "version \\d",
+    "v\\d+\\.\\d+",
+    "debuts?",
+    "unveils?",
+    "introduces?",
+    "rolls? out",
+    "now available",
+    "goes? live",
+    "beta (?:release|launch|program)",
+    "preview (?:release|launch)",
+]
+
+[ma_signal]
+weight = 2.0
+patterns = [
+    "acqui(?:res?|sition)",
+    "merges? with",
+    "merger",
+    "takes? (?:over|a stake)",
+    "investment round",
+    "series [A-Da-d]",
+    "buys?",
+    "purchased?",
+    "buyout",
+    "divests?",
+    "divestiture",
+    "spin.?off",
+]
+
+[partnership]
+weight = 1.3
+patterns = [
+    "partners? with",
+    "partnership",
+    "integrates? with",
+    "alliance",
+    "joint venture",
+    "collaboration",
+    "teams? up",
+    "strategic (?:deal|agreement|relationship)",
+    "signs? (?:deal|agreement|contract)",
+    "extends? (?:partnership|agreement|contract)",
+]
+
+[standards_shift]
+weight = 1.5
+patterns = [
+    "SMPTE ST \\d+",
+    "DVB[- ]\\w+",
+    "HbbTV",
+    "SCTE[- ]\\d+",
+    "ATSC \\d",
+    "specification",
+    "draft (?:standard|specification|published)",
+    "standard(?:s)? (?:body|update|revision|approved)",
+    "interoperability",
+    "NMOS IS[- ]\\d+",
+    "MPEG[- ]\\w+",
+    "CMAF",
+    "AV1",
+    "VVC",
+]
+
+[competitor_move]
+weight = 1.4
+patterns = [
+    "Grass Valley",
+    "Dalet",
+    "Avid",
+    "Pebble Beach",
+    "Harmonic",
+    "Mediakind",
+    "Vizrt",
+    "Bitmovin",
+    "Imagine Communications",
+    "Evertz",
+    "Ross Video",
+    "Telestream",
+]
+
+[talent_move]
+weight = 1.3
+patterns = [
+    "\\bappoints?\\b",
+    "\\bnames?\\s+(?:as|new)\\b",
+    "\\bhires?\\b",
+    "\\bjoins?\\s+(?:as|the|a)\\b",
+    "\\bdeparts?\\b",
+    "\\bleaves?\\s+(?:the|as|to)\\b",
+    "\\bsteps? down\\b",
+    "(?:new|named)\\s+(?:CEO|CTO|CPO|CFO|COO|CMO|VP|president|director|head)",
+    "\\bpromoted? to\\b",
+    "\\bsucceeds?\\b",
+]
+
+[technology_adoption]
+weight = 1.2
+patterns = [
+    "FAST",
+    "cloud-native",
+    "AI-powered",
+    "GenAI",
+    "IP production",
+    "ATSC 3\\.0",
+    "NextGen TV",
+    "edge computing",
+    "5G broadcast",
+    "remote production",
+    "virtualized",
+    "SRT protocol",
+    "RIST",
+    "NDI",
+    "low latency",
+    "real-time",
+    "8K",
+    "HDR",
+    "Dolby Atmos",
+    "immersive",
+]
+
+[regulatory]
+weight = 1.6
+patterns = [
+    "EU (?:regulation|directive|mandate|ruling|law)",
+    "FCC",
+    "Ofcom",
+    "regulat(?:ion|ory|or|es?)",
+    "compliance",
+    "mandate",
+    "directive",
+    "legislation",
+    "GDPR",
+    "Digital (?:Markets|Services) Act",
+    "media (?:law|regulation|authority)",
+    "broadcast(?:ing)? (?:license|licence|authority)",
+]
+
+[client_pressure]
+weight = 1.5
+patterns = [
+    "budget cuts?",
+    "cost (?:reduction|cutting|pressure)",
+    "consolidat(?:es?|ion)",
+    "exit(?:s|ed)?",
+    "cancels?",
+    "churn",
+    "end-of-life",
+    "discontinue",
+    "downsiz(?:es?|ing)",
+    "restructur(?:es?|ing)",
+]
+
+[market_sizing]
+weight = 1.3
+patterns = [
+    "market (?:report|research|study|analysis|forecast)",
+    "(?:revenue|market) (?:of|reaches?|hits?|exceeds?|surpasses?)",
+    "market share",
+    "CAGR",
+    "\\$\\d+[BMK]",
+    "billion",
+    "million",
+    "forecast",
+    "projects? (?:growth|increase|decline)",
+    "market size",
+    "valuation",
+]

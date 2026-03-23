@@ -1,0 +1,160 @@
+# Domain keyword dictionaries for AirPulse classification.
+# Each domain has a weighted keyword list. A domain is assigned
+# if the sum of matched keyword weights exceeds the threshold (default: 2.0).
+
+[broadcast]
+threshold = 2.0
+keywords = [
+    { term = "broadcast", weight = 1.5 },
+    { term = "broadcasting", weight = 1.5 },
+    { term = "playout", weight = 2.0 },
+    { term = "MAM", weight = 1.5 },
+    { term = "media asset management", weight = 2.0 },
+    { term = "master control", weight = 2.0 },
+    { term = "ATSC", weight = 1.5 },
+    { term = "DVB", weight = 1.5 },
+    { term = "SMPTE", weight = 1.5 },
+    { term = "SDI", weight = 1.5 },
+    { term = "IP production", weight = 2.0 },
+    { term = "studio", weight = 1.0 },
+    { term = "transmission", weight = 1.0 },
+    { term = "linear TV", weight = 2.0 },
+    { term = "channel origination", weight = 2.0 },
+    { term = "television", weight = 1.0 },
+    { term = "TV", weight = 0.8 },
+    { term = "newsroom", weight = 1.5 },
+    { term = "production", weight = 0.8 },
+    { term = "remote production", weight = 2.0 },
+    { term = "NDI", weight = 1.5 },
+    { term = "NMOS", weight = 2.0 },
+    { term = "AMPP", weight = 2.0 },
+    { term = "Grass Valley", weight = 1.5 },
+    { term = "Vizrt", weight = 1.5 },
+    { term = "Avid", weight = 1.0 },
+    { term = "Dalet", weight = 1.5 },
+    { term = "EBU", weight = 1.5 },
+]
+
+[ott]
+threshold = 2.0
+keywords = [
+    { term = "OTT", weight = 2.0 },
+    { term = "streaming", weight = 1.5 },
+    { term = "SVOD", weight = 2.0 },
+    { term = "AVOD", weight = 2.0 },
+    { term = "FAST", weight = 2.0 },
+    { term = "FAST channel", weight = 2.5 },
+    { term = "video on demand", weight = 1.5 },
+    { term = "VOD", weight = 1.5 },
+    { term = "HLS", weight = 1.5 },
+    { term = "DASH", weight = 1.5 },
+    { term = "CMAF", weight = 2.0 },
+    { term = "DRM", weight = 1.5 },
+    { term = "CDN", weight = 1.0 },
+    { term = "ABR", weight = 1.5 },
+    { term = "transcoding", weight = 1.5 },
+    { term = "encoding", weight = 1.0 },
+    { term = "Netflix", weight = 1.0 },
+    { term = "Disney+", weight = 1.0 },
+    { term = "cord-cutting", weight = 2.0 },
+    { term = "direct-to-consumer", weight = 1.5 },
+    { term = "IPTV", weight = 1.5 },
+    { term = "HbbTV", weight = 2.0 },
+    { term = "Bitmovin", weight = 1.5 },
+    { term = "Mux", weight = 1.5 },
+]
+
+[sports]
+threshold = 2.0
+keywords = [
+    { term = "sports rights", weight = 2.5 },
+    { term = "live sports", weight = 2.5 },
+    { term = "sports broadcasting", weight = 2.5 },
+    { term = "sports media", weight = 2.0 },
+    { term = "sports streaming", weight = 2.0 },
+    { term = "FIFA", weight = 1.5 },
+    { term = "UEFA", weight = 1.5 },
+    { term = "Olympics", weight = 1.5 },
+    { term = "Premier League", weight = 1.5 },
+    { term = "NFL", weight = 1.5 },
+    { term = "NBA", weight = 1.5 },
+    { term = "SVG", weight = 1.5 },
+    { term = "replay", weight = 1.0 },
+    { term = "stadium", weight = 1.0 },
+    { term = "SportsPro", weight = 1.5 },
+    { term = "esports", weight = 1.5 },
+]
+
+[ai]
+threshold = 1.5
+keywords = [
+    { term = "artificial intelligence", weight = 2.0 },
+    { term = "machine learning", weight = 2.0 },
+    { term = "AI", weight = 1.5 },
+    { term = "GenAI", weight = 2.0 },
+    { term = "generative AI", weight = 2.0 },
+    { term = "deep learning", weight = 2.0 },
+    { term = "neural network", weight = 2.0 },
+    { term = "LLM", weight = 2.0 },
+    { term = "large language model", weight = 2.0 },
+    { term = "natural language", weight = 1.5 },
+    { term = "computer vision", weight = 2.0 },
+    { term = "automated metadata", weight = 2.0 },
+    { term = "content recognition", weight = 1.5 },
+    { term = "speech-to-text", weight = 1.5 },
+    { term = "auto-captioning", weight = 2.0 },
+    { term = "GPT", weight = 1.5 },
+    { term = "Claude", weight = 1.5 },
+    { term = "ML pipeline", weight = 2.0 },
+    { term = "model training", weight = 1.5 },
+    { term = "inference", weight = 1.0 },
+]
+
+[cloud]
+threshold = 2.0
+keywords = [
+    { term = "cloud", weight = 1.0 },
+    { term = "cloud-native", weight = 2.0 },
+    { term = "SaaS", weight = 1.5 },
+    { term = "AWS", weight = 1.0 },
+    { term = "Azure", weight = 1.0 },
+    { term = "Google Cloud", weight = 1.0 },
+    { term = "Kubernetes", weight = 1.5 },
+    { term = "containerized", weight = 1.5 },
+    { term = "microservices", weight = 1.5 },
+    { term = "serverless", weight = 1.5 },
+    { term = "hybrid cloud", weight = 2.0 },
+    { term = "multi-cloud", weight = 2.0 },
+    { term = "cloud playout", weight = 2.5 },
+    { term = "cloud production", weight = 2.5 },
+    { term = "cloud migration", weight = 2.0 },
+    { term = "IaaS", weight = 1.5 },
+    { term = "PaaS", weight = 1.5 },
+    { term = "edge computing", weight = 1.5 },
+    { term = "Harmonic", weight = 1.0 },
+]
+
+[adtech]
+threshold = 2.0
+keywords = [
+    { term = "ad insertion", weight = 2.0 },
+    { term = "SSAI", weight = 2.5 },
+    { term = "CSAI", weight = 2.5 },
+    { term = "DAI", weight = 2.0 },
+    { term = "programmatic", weight = 2.0 },
+    { term = "ad tech", weight = 2.0 },
+    { term = "adtech", weight = 2.0 },
+    { term = "addressable", weight = 1.5 },
+    { term = "ad revenue", weight = 2.0 },
+    { term = "CPM", weight = 1.5 },
+    { term = "FreeWheel", weight = 2.0 },
+    { term = "Magnite", weight = 2.0 },
+    { term = "The Trade Desk", weight = 2.0 },
+    { term = "SCTE-35", weight = 2.5 },
+    { term = "SCTE-224", weight = 2.5 },
+    { term = "ad server", weight = 2.0 },
+    { term = "DSP", weight = 1.5 },
+    { term = "SSP", weight = 1.5 },
+    { term = "ad spend", weight = 2.0 },
+    { term = "VAST", weight = 1.5 },
+]

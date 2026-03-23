@@ -1,0 +1,28 @@
+[package]
+name = "airpulse-ingest"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+airpulse-types = { path = "../airpulse-types" }
+airpulse-classify = { path = "../airpulse-classify" }
+airpulse-store = { path = "../airpulse-store" }
+uuid = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+reqwest = { workspace = true }
+feed-rs = { workspace = true }
+redis = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+rand = "0.9"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+mockall = "0.13"
+wiremock = "0.6"
