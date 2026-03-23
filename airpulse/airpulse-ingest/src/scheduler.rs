@@ -4,6 +4,7 @@ use airpulse_types::{
     AggregatorHealth, FeedSource, HealthStatus, IngestError, NormalisedItem, PollEvent, PollResult,
 };
 use chrono::Utc;
+use rand::Rng;
 use std::sync::Arc;
 use tokio::sync::{broadcast, Semaphore};
 use tracing::{error, info, warn};
@@ -24,6 +25,8 @@ pub struct FeedScheduler {
     classifier: Arc<ClassificationPipeline>,
     store: SignalStore,
     concurrency: Arc<Semaphore>,
+    /// Maximum jitter in seconds applied before each poll (§5.1.1).
+    jitter_max_secs: u32,
     /// Broadcast channel for streaming normalised items to subscribers (§5.1.2).
     item_tx: broadcast::Sender<NormalisedItem>,
 }
@@ -37,6 +40,26 @@ impl FeedScheduler {
         store: SignalStore,
         max_concurrent: usize,
     ) -> Self {
+        Self::with_jitter(
+            poller,
+            circuit_breaker,
+            dedup,
+            classifier,
+            store,
+            max_concurrent,
+            30,
+        )
+    }
+
+    pub fn with_jitter(
+        poller: FeedPoller,
+        circuit_breaker: Arc<CircuitBreaker>,
+        dedup: Arc<DedupFilter>,
+        classifier: Arc<ClassificationPipeline>,
+        store: SignalStore,
+        max_concurrent: usize,
+        jitter_max_secs: u32,
+    ) -> Self {
         let (item_tx, _) = broadcast::channel(DEFAULT_CHANNEL_CAPACITY);
 
         Self {
@@ -46,6 +69,7 @@ impl FeedScheduler {
             classifier,
             store,
             concurrency: Arc::new(Semaphore::new(max_concurrent)),
+            jitter_max_secs,
             item_tx,
         }
     }
@@ -174,6 +198,14 @@ impl FeedScheduler {
             };
 
             let source_name = source.name.clone();
+
+            // Apply per-poll jitter to prevent thundering herd (§5.1.1)
+            if self.jitter_max_secs > 0 {
+                let jitter = rand::rng().random_range(0..=self.jitter_max_secs);
+                if jitter > 0 {
+                    tokio::time::sleep(std::time::Duration::from_secs(jitter as u64)).await;
+                }
+            }
 
             info!("Polling {}", source_name);
             drop(permit);
