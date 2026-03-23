@@ -95,6 +95,7 @@ async fn main() -> anyhow::Result<()> {
     let app_state = AppState {
         store,
         circuit_breaker,
+        scheduler: Some(scheduler),
     };
     let app = build_router(app_state);
 

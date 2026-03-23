@@ -9,7 +9,8 @@ pub mod scorer;
 pub mod signal_tagger;
 
 use airpulse_types::{
-    ClassifiedItem, ClassifierStats, ClassifyError, Domain, KeywordHit, NormalisedItem, SignalType,
+    ClassificationPipelineTrait, ClassifiedItem, ClassifierStats, ClassifyError, Domain,
+    KeywordHit, NormalisedItem, SignalType,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -153,6 +154,19 @@ impl ClassificationPipeline {
                 }
             }
         }
+    }
+}
+
+impl ClassificationPipelineTrait for ClassificationPipeline {
+    fn classify(&self, item: NormalisedItem) -> Result<ClassifiedItem, ClassifyError> {
+        self.classify(item)
+    }
+
+    fn classify_batch(
+        &self,
+        items: Vec<NormalisedItem>,
+    ) -> Vec<Result<ClassifiedItem, ClassifyError>> {
+        self.classify_batch(items)
     }
 }
 

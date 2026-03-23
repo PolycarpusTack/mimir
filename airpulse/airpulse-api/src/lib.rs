@@ -4,6 +4,7 @@
 //! health monitoring, and statistics. Rate limited via tower.
 
 use airpulse_ingest::circuit::CircuitBreaker;
+use airpulse_ingest::scheduler::FeedScheduler;
 use airpulse_store::SignalStore;
 use airpulse_types::{Domain, FeedSource, Signal, SignalPage, SignalQuery, SignalType};
 use axum::{
@@ -24,6 +25,7 @@ use uuid::Uuid;
 pub struct AppState {
     pub store: SignalStore,
     pub circuit_breaker: Arc<CircuitBreaker>,
+    pub scheduler: Option<Arc<FeedScheduler>>,
 }
 
 /// Build the API router with rate limiting.
@@ -193,7 +195,7 @@ async fn list_sources(
 }
 
 async fn force_poll(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<PollAccepted>), (StatusCode, Json<ErrorResponse>)> {
     let uuid = Uuid::parse_str(&id).map_err(|_| {
@@ -205,6 +207,19 @@ async fn force_poll(
             }),
         )
     })?;
+
+    // Fire-and-forget: spawn the poll asynchronously (§5.6.1)
+    if let Some(ref scheduler) = state.scheduler {
+        let scheduler = scheduler.clone();
+        let store = state.store.clone();
+        tokio::spawn(async move {
+            if let Ok(sources) = store.list_feed_sources().await {
+                if let Some(source) = sources.iter().find(|s| s.id == uuid) {
+                    let _ = scheduler.force_poll(source).await;
+                }
+            }
+        });
+    }
 
     Ok((
         StatusCode::ACCEPTED,

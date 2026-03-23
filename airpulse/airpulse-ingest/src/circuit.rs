@@ -1,4 +1,4 @@
-use airpulse_types::CircuitState;
+use airpulse_types::{CircuitBreakerTrait, CircuitState};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -118,6 +118,24 @@ impl CircuitBreaker {
         }
 
         (closed, open, half_open)
+    }
+}
+
+impl CircuitBreakerTrait for CircuitBreaker {
+    fn state(&self, source_id: Uuid) -> CircuitState {
+        self.state(source_id)
+    }
+
+    fn record_success(&self, source_id: Uuid) {
+        self.record_success(source_id);
+    }
+
+    fn record_failure(&self, source_id: Uuid) {
+        self.record_failure(source_id);
+    }
+
+    fn should_attempt(&self, source_id: Uuid) -> bool {
+        self.should_attempt(source_id)
     }
 }
 
