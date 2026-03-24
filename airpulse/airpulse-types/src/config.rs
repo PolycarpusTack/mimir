@@ -12,6 +12,8 @@ pub struct AirPulseConfig {
     pub baseline: BaselineConfig,
     pub digest: DigestConfig,
     pub jira: JiraConfig,
+    pub scrape: ScrapeConfig,
+    pub notify: NotifyConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +223,58 @@ impl Default for JiraConfig {
     }
 }
 
+/// Scraper configuration (Phase 5).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrapeConfig {
+    pub scraper_dir: String,
+    pub python_path: String,
+    pub default_timeout_secs: u32,
+    pub circuit_threshold: u32,
+}
+
+impl Default for ScrapeConfig {
+    fn default() -> Self {
+        Self {
+            scraper_dir: "./scrapers".to_string(),
+            python_path: "python3".to_string(),
+            default_timeout_secs: 60,
+            circuit_threshold: 3,
+        }
+    }
+}
+
+/// Notification configuration (Phase 5).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotifyConfig {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_user: String,
+    pub smtp_password: String,
+    pub smtp_from: String,
+    pub digest_recipients: Vec<String>,
+    pub slack_surge_webhook: String,
+    pub slack_digest_webhook: String,
+    pub slack_jira_webhook: String,
+    pub jira_sync_interval_secs: u64,
+}
+
+impl Default for NotifyConfig {
+    fn default() -> Self {
+        Self {
+            smtp_host: String::new(),
+            smtp_port: 587,
+            smtp_user: String::new(),
+            smtp_password: String::new(),
+            smtp_from: String::new(),
+            digest_recipients: Vec::new(),
+            slack_surge_webhook: String::new(),
+            slack_digest_webhook: String::new(),
+            slack_jira_webhook: String::new(),
+            jira_sync_interval_secs: 900,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,6 +300,14 @@ mod tests {
         assert_eq!(cfg.baseline.z_elevated, 1.5);
         assert_eq!(cfg.baseline.z_spike, 2.5);
         assert_eq!(cfg.baseline.z_surge, 3.5);
+        // Phase 5 defaults
+        assert_eq!(cfg.scrape.scraper_dir, "./scrapers");
+        assert_eq!(cfg.scrape.python_path, "python3");
+        assert_eq!(cfg.scrape.default_timeout_secs, 60);
+        assert_eq!(cfg.scrape.circuit_threshold, 3);
+        assert_eq!(cfg.notify.smtp_port, 587);
+        assert_eq!(cfg.notify.jira_sync_interval_secs, 900);
+        assert!(cfg.notify.digest_recipients.is_empty());
     }
 
     #[test]

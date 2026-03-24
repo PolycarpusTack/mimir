@@ -17,3 +17,5 @@ export type {
 } from './health';
 export type { DigestSummary, DigestDetail } from './digest';
 export type { ApprovalStatus, ApprovalQueueItem, JiraPushRequest } from './jira';
+export type { WsMessage } from './ws';
+export type { VendorStats } from './vendor';

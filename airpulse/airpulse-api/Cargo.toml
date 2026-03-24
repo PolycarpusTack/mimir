@@ -13,6 +13,9 @@ airpulse-enrich = { path = "../airpulse-enrich" }
 airpulse-baseline = { path = "../airpulse-baseline" }
 airpulse-digest = { path = "../airpulse-digest" }
 airpulse-jira = { path = "../airpulse-jira" }
+airpulse-scrape = { path = "../airpulse-scrape" }
+airpulse-ws = { path = "../airpulse-ws" }
+airpulse-notify = { path = "../airpulse-notify" }
 uuid = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }

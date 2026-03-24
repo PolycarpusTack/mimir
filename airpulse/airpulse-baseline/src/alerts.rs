@@ -12,9 +12,11 @@ pub struct AlertConfig {
     pub z_elevated: f64,
     pub z_spike: f64,
     pub z_surge: f64,
+    pub z_silence: f64,
     pub cooldown_elevated_secs: i64,
     pub cooldown_spike_secs: i64,
     pub cooldown_surge_secs: i64,
+    pub cooldown_silence_secs: i64,
 }
 
 impl Default for AlertConfig {
@@ -23,9 +25,11 @@ impl Default for AlertConfig {
             z_elevated: 1.5,
             z_spike: 2.5,
             z_surge: 3.5,
+            z_silence: -2.0,
             cooldown_elevated_secs: 7200,
             cooldown_spike_secs: 14400,
             cooldown_surge_secs: 28800,
+            cooldown_silence_secs: 14400,
         }
     }
 }
@@ -36,18 +40,25 @@ impl AlertConfig {
             z_elevated: cfg.z_elevated,
             z_spike: cfg.z_spike,
             z_surge: cfg.z_surge,
+            z_silence: -2.0,
             cooldown_elevated_secs: cfg.cooldown_elevated_secs as i64,
             cooldown_spike_secs: cfg.cooldown_spike_secs as i64,
             cooldown_surge_secs: cfg.cooldown_surge_secs as i64,
+            cooldown_silence_secs: 14400,
         }
     }
 }
 
 /// Determine the highest severity level for a given z-score.
-/// Returns None if z-score is below all thresholds or negative.
+/// Returns None if z-score is below all thresholds.
+/// Negative z-scores may trigger Silence alerts (Phase 5).
 pub fn determine_severity(z: f64, config: &AlertConfig) -> Option<ShiftSeverity> {
     if z < 0.0 {
-        return None; // Phase 2 only alerts on positive deviation
+        // Phase 5: Silence alert on significant negative deviation
+        if z <= config.z_silence {
+            return Some(ShiftSeverity::Silence);
+        }
+        return None;
     }
     if z >= config.z_surge {
         Some(ShiftSeverity::Surge)
@@ -84,6 +95,7 @@ pub fn cooldown_duration(severity: ShiftSeverity, config: &AlertConfig) -> Durat
         ShiftSeverity::Elevated => Duration::seconds(config.cooldown_elevated_secs),
         ShiftSeverity::Spike => Duration::seconds(config.cooldown_spike_secs),
         ShiftSeverity::Surge => Duration::seconds(config.cooldown_surge_secs),
+        ShiftSeverity::Silence => Duration::seconds(config.cooldown_silence_secs),
     }
 }
 
@@ -199,9 +211,19 @@ mod tests {
     }
 
     #[test]
-    fn tc_sa_negative_z_no_alert() {
+    fn tc_sa_negative_z_silence_alert() {
         let config = AlertConfig::default();
-        assert_eq!(determine_severity(-2.0, &config), None);
+        // Phase 5: z <= -2.0 triggers Silence alert
+        assert_eq!(
+            determine_severity(-2.0, &config),
+            Some(ShiftSeverity::Silence)
+        );
+        assert_eq!(
+            determine_severity(-3.0, &config),
+            Some(ShiftSeverity::Silence)
+        );
+        // Mild negative z still returns None
+        assert_eq!(determine_severity(-1.0, &config), None);
     }
 
     #[test]

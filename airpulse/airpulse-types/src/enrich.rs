@@ -186,6 +186,7 @@ pub enum ShiftSeverity {
     Elevated,
     Spike,
     Surge,
+    Silence,
 }
 
 impl ShiftSeverity {
@@ -194,6 +195,7 @@ impl ShiftSeverity {
             Self::Elevated => "Elevated",
             Self::Spike => "Spike",
             Self::Surge => "Surge",
+            Self::Silence => "Silence",
         }
     }
 
@@ -202,16 +204,19 @@ impl ShiftSeverity {
             "Elevated" => Some(Self::Elevated),
             "Spike" => Some(Self::Spike),
             "Surge" => Some(Self::Surge),
+            "Silence" => Some(Self::Silence),
             _ => None,
         }
     }
 
     /// Get the z-score threshold for this severity.
+    /// Silence uses a negative threshold (volume dropped below baseline).
     pub fn z_threshold(&self) -> f64 {
         match self {
             Self::Elevated => 1.5,
             Self::Spike => 2.5,
             Self::Surge => 3.5,
+            Self::Silence => -2.0,
         }
     }
 }

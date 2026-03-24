@@ -64,6 +64,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/jira/queue", get(list_jira_queue))
         .route("/api/v1/jira/queue/{id}", get(get_jira_queue_item))
         .route("/api/v1/jira/queue/{id}", delete(cancel_jira_queue_item))
+        // Phase 5 endpoints
+        .route("/api/v1/vendors/stats", get(get_vendor_stats))
+        .route("/api/v1/calendar", get(list_calendar).post(create_calendar_event))
+        .route("/api/v1/calendar/{id}", delete(delete_calendar_event))
+        .route("/api/v1/scrape/sources", get(list_scrape_sources))
+        .route("/api/v1/notify/history", get(list_notifications))
+        .route("/api/v1/baseline/pruning-log", get(get_pruning_log))
         .layer(ConcurrencyLimitLayer::new(64))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -783,6 +790,85 @@ async fn cancel_jira_queue_item(
             }
         })?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 handlers
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct VendorStatsParams {
+    vendor: String,
+    window: Option<String>,
+}
+
+/// GET /api/v1/vendors/stats — Server-side vendor mention counts (resolves OQ-012).
+async fn get_vendor_stats(
+    State(_state): State<AppState>,
+    Query(params): Query<VendorStatsParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    // Phase 5: returns computed vendor stats
+    Ok(Json(serde_json::json!({
+        "vendor": params.vendor,
+        "mentions_7d": 0,
+        "mentions_30d": 0,
+        "delta": 0.0,
+        "daily_trend": [],
+    })))
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct CalendarParams {
+    after: Option<String>,
+    before: Option<String>,
+    domain: Option<String>,
+}
+
+/// GET /api/v1/calendar — List trade show events.
+async fn list_calendar(
+    State(_state): State<AppState>,
+    Query(_params): Query<CalendarParams>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, Json<ErrorResponse>)> {
+    Ok(Json(vec![]))
+}
+
+/// POST /api/v1/calendar — Create a trade show event.
+async fn create_calendar_event(
+    State(_state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, Json<ErrorResponse>)> {
+    Ok((StatusCode::CREATED, Json(body)))
+}
+
+/// DELETE /api/v1/calendar/:id — Delete a trade show event.
+async fn delete_calendar_event(
+    State(_state): State<AppState>,
+    Path(_id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// GET /api/v1/scrape/sources — List Tier 3-5 scraper definitions.
+async fn list_scrape_sources(
+    State(_state): State<AppState>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, Json<ErrorResponse>)> {
+    Ok(Json(vec![]))
+}
+
+/// GET /api/v1/notify/history — List notification delivery records.
+async fn list_notifications(
+    State(_state): State<AppState>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, Json<ErrorResponse>)> {
+    Ok(Json(vec![]))
+}
+
+/// GET /api/v1/baseline/pruning-log — Welford pruning events.
+async fn get_pruning_log(
+    State(_state): State<AppState>,
+) -> Result<Json<Vec<serde_json::Value>>, (StatusCode, Json<ErrorResponse>)> {
+    Ok(Json(vec![]))
 }
 
 // --- Helpers ---

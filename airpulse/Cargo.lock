@@ -21,8 +21,11 @@ dependencies = [
  "airpulse-enrich",
  "airpulse-ingest",
  "airpulse-jira",
+ "airpulse-notify",
+ "airpulse-scrape",
  "airpulse-store",
  "airpulse-types",
+ "airpulse-ws",
  "anyhow",
  "axum",
  "chrono",
@@ -148,6 +151,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "airpulse-notify"
+version = "0.1.0"
+dependencies = [
+ "airpulse-store",
+ "airpulse-types",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "airpulse-scrape"
+version = "0.1.0"
+dependencies = [
+ "airpulse-store",
+ "airpulse-types",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "airpulse-store"
 version = "0.1.0"
 dependencies = [
@@ -170,6 +204,20 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "airpulse-ws"
+version = "0.1.0"
+dependencies = [
+ "airpulse-types",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 

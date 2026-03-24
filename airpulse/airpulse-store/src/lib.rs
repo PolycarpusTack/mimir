@@ -102,6 +102,37 @@ impl SignalStore {
             .await
             .map_err(|e| StoreError::Migration(e.to_string()))?;
 
+        // Phase 5 migrations
+        let v010 = include_str!("../migrations/V010__add_scraper_fields.sql");
+        sqlx::raw_sql(v010)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v011 = include_str!("../migrations/V011__create_job_board_signals.sql");
+        sqlx::raw_sql(v011)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v012 = include_str!("../migrations/V012__create_notifications.sql");
+        sqlx::raw_sql(v012)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v013 = include_str!("../migrations/V013__create_trade_show_events.sql");
+        sqlx::raw_sql(v013)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v014 = include_str!("../migrations/V014__jira_status_sync.sql");
+        sqlx::raw_sql(v014)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
         Ok(())
     }
 

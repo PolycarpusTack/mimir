@@ -7,8 +7,9 @@ use crate::{
     AggregatorHealth, ApprovalQueueItem, ApprovalStatus, BaselineError, BaselineKey, CircuitState,
     ClassifiedItem, ClassifyError, DedupError, DedupStats, DigestDocument, DigestError,
     DigestSummary, EnqueueResult, EnrichError, EnrichedAnnotation, FeedSource, IngestError,
-    JiraError, JiraPushRequest, JiraTicket, JiraWorkerHealth, NormalisedItem, PollEvent,
-    PollResult, ShiftAlert, Signal, SignalPage, SignalQuery, StoreError, WelfordState,
+    JiraError, JiraPushRequest, JiraTicket, JiraWorkerHealth, NormalisedItem, NotifyError,
+    PollEvent, PollResult, ScrapeError, ScrapeResult, ScraperHealth, ShiftAlert, Signal,
+    SignalPage, SignalQuery, StoreError, WelfordState, WsConnectionInfo, WsMessage,
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
@@ -145,4 +146,49 @@ pub trait JiraWorkerTrait: Send + Sync {
 pub trait AtlassianClientTrait: Send + Sync {
     async fn create_issue(&self, ticket: &JiraTicket) -> Result<String, JiraError>;
     async fn health_check(&self) -> Result<(), JiraError>;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 trait interfaces
+// ---------------------------------------------------------------------------
+
+/// Scraper orchestrator interface (Phase 5).
+#[allow(async_fn_in_trait)]
+pub trait ScraperOrchestratorTrait: Send + Sync {
+    async fn start(&self) -> Result<(), ScrapeError>;
+    async fn stop(&self) -> Result<(), ScrapeError>;
+    async fn force_scrape(&self, source_id: Uuid) -> Result<ScrapeResult, ScrapeError>;
+    fn health(&self) -> ScraperHealth;
+}
+
+/// WebSocket connection registry interface (Phase 5).
+#[allow(async_fn_in_trait)]
+pub trait WsConnectionRegistryTrait: Send + Sync {
+    fn register(&self, id: Uuid) -> Result<(), crate::WsError>;
+    fn deregister(&self, id: Uuid);
+    async fn broadcast(&self, msg: WsMessage);
+    fn connection_count(&self) -> usize;
+    fn snapshot(&self) -> Vec<WsConnectionInfo>;
+}
+
+/// Email client interface (Phase 5).
+#[allow(async_fn_in_trait)]
+pub trait EmailClientTrait: Send + Sync {
+    async fn send_digest(
+        &self,
+        digest: &DigestDocument,
+        recipients: &[String],
+    ) -> Result<(), NotifyError>;
+    async fn health_check(&self) -> Result<(), NotifyError>;
+}
+
+/// Slack client interface (Phase 5).
+#[allow(async_fn_in_trait)]
+pub trait SlackClientTrait: Send + Sync {
+    async fn send(
+        &self,
+        channel_webhook: &str,
+        blocks: serde_json::Value,
+    ) -> Result<(), NotifyError>;
+    async fn health_check(&self) -> Result<(), NotifyError>;
 }

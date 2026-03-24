@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hadron
+      POSTGRES_USER: airpulse
+      POSTGRES_PASSWORD: airpulse
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airpulse", "-d", "hadron"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  airpulse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8741:8741"
+    environment:
+      DATABASE_URL: postgres://airpulse:airpulse@postgres:5432/hadron
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-}
+      JIRA_USER_EMAIL: ${JIRA_USER_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      JIRA_PROJECT_KEY: ${JIRA_PROJECT_KEY:-AIRFORGE}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-airpulse@mediagenix.tv}
+      DIGEST_RECIPIENTS: ${DIGEST_RECIPIENTS:-}
+      SLACK_SURGE_WEBHOOK: ${SLACK_SURGE_WEBHOOK:-}
+      SLACK_DIGEST_WEBHOOK: ${SLACK_DIGEST_WEBHOOK:-}
+      SLACK_JIRA_WEBHOOK: ${SLACK_JIRA_WEBHOOK:-}
+      CRON_DIGEST: ${CRON_DIGEST:-0 7 * * 1}
+    volumes:
+      - ./scrapers:/app/scrapers:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8741/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    build:
+      context: ./airpulse-dashboard
+      dockerfile: Dockerfile
+    depends_on:
+      - airpulse
+    ports:
+      - "3000:80"
+
+volumes:
+  pg_data:

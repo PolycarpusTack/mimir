@@ -202,3 +202,64 @@ pub enum JiraError {
     #[error("Worker error: {0}")]
     Worker(String),
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5 errors
+// ---------------------------------------------------------------------------
+
+/// Errors from the scraper pipeline (Phase 5).
+#[derive(Debug, Error)]
+pub enum ScrapeError {
+    #[error("Scraper timeout after {timeout_secs}s for source {source_id}")]
+    Timeout { source_id: Uuid, timeout_secs: u32 },
+
+    #[error("Scraper process failed: exit code {code}")]
+    ProcessFailed { code: i32 },
+
+    #[error("Parse error on line {line}: {reason}")]
+    ParseError { line: u32, reason: String },
+
+    #[error("Source not found: {0}")]
+    SourceNotFound(Uuid),
+
+    #[error("Circuit open for source {0}")]
+    CircuitOpen(Uuid),
+
+    #[error("Store error: {0}")]
+    Store(String),
+}
+
+/// Errors from the WebSocket server (Phase 5).
+#[derive(Debug, Error)]
+pub enum WsError {
+    #[error("Connection closed: {0}")]
+    ConnectionClosed(String),
+
+    #[error("Send failed: {0}")]
+    SendFailed(String),
+
+    #[error("Protocol error: {0}")]
+    ProtocolError(String),
+}
+
+/// Errors from the notification service (Phase 5).
+#[derive(Debug, Error)]
+pub enum NotifyError {
+    #[error("SMTP error: {0}")]
+    SmtpError(String),
+
+    #[error("Authentication error: {0}")]
+    AuthError(String),
+
+    #[error("Slack webhook error: HTTP {status} — {body}")]
+    SlackError { status: u16, body: String },
+
+    #[error("Template error: {0}")]
+    TemplateError(String),
+
+    #[error("Store error: {0}")]
+    Store(String),
+
+    #[error("Configuration missing: {0}")]
+    ConfigMissing(String),
+}

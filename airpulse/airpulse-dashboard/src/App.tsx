@@ -13,6 +13,7 @@ import { RoadmapQueue } from '@/components/layout/RoadmapQueue';
 import { JiraPushModal } from '@/components/signal/JiraPushModal';
 import { useUIStore } from '@/store/ui';
 import { useSignalEnrichment } from '@/api/signals';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import type { Signal } from '@/types';
 
 const queryClient = new QueryClient({
@@ -83,10 +84,16 @@ const MainContent: React.FC = () => {
   );
 };
 
+const WsConnector: React.FC = () => {
+  useWebSocket();
+  return null;
+};
+
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
+        <WsConnector />
         <div
           style={{
             display: 'flex',

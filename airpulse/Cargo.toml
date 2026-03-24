@@ -9,6 +9,9 @@ members = [
     "airpulse-api",
     "airpulse-digest",
     "airpulse-jira",
+    "airpulse-scrape",
+    "airpulse-ws",
+    "airpulse-notify",
 ]
 resolver = "2"
 
