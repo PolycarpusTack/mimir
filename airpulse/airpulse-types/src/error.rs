@@ -136,3 +136,69 @@ pub enum BaselineError {
     #[error("Configuration error: {0}")]
     ConfigError(String),
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4 errors
+// ---------------------------------------------------------------------------
+
+/// Errors from the digest pipeline (§5).
+#[derive(Debug, Error)]
+pub enum DigestError {
+    #[error("Insufficient signals: need >= 10, found {found}")]
+    InsufficientSignals { found: u32 },
+
+    #[error("Claude API error: {0}")]
+    ApiError(String),
+
+    #[error("Section generation failed for '{section}': {reason}")]
+    SectionFailed { section: String, reason: String },
+
+    #[error("Digest already exists for week {week}")]
+    AlreadyExists { week: String },
+
+    #[error("Generation in progress — try again later")]
+    GenerationInProgress,
+
+    #[error("Store error: {0}")]
+    Store(String),
+
+    #[error("Render error: {0}")]
+    Render(String),
+
+    #[error("Token budget exceeded: {used} > {budget}")]
+    TokenBudgetExceeded { used: u32, budget: u32 },
+}
+
+/// Errors from the JIRA connector (§6.3.4).
+#[derive(Debug, Error)]
+pub enum JiraError {
+    #[error("Authentication error: {message}")]
+    AuthError { message: String },
+
+    #[error("Rate limited — retry after {retry_after_secs}s")]
+    RateLimit { retry_after_secs: u64 },
+
+    #[error("Resource not found: {resource}")]
+    NotFound { resource: String },
+
+    #[error("Atlassian API error: HTTP {status} — {body}")]
+    ApiError { status: u16, body: String },
+
+    #[error("Request timeout")]
+    Timeout,
+
+    #[error("ADF conversion failed for markdown: {reason}")]
+    AdfConversionError { markdown: String, reason: String },
+
+    #[error("Signal already pushed as {existing_key}")]
+    DuplicateSignal { existing_key: String },
+
+    #[error("Store error: {0}")]
+    Store(String),
+
+    #[error("Invalid request: {0}")]
+    InvalidRequest(String),
+
+    #[error("Worker error: {0}")]
+    Worker(String),
+}

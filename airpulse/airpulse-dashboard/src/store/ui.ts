@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ActivePanel = 'shift' | 'vendors' | 'tech';
+export type ActivePanel = 'shift' | 'vendors' | 'tech' | 'digest';
 
 interface UIStore {
   selectedSignalId: string | null;

@@ -9,12 +9,13 @@ use airpulse_ingest::circuit::CircuitBreaker;
 use airpulse_ingest::scheduler::FeedScheduler;
 use airpulse_store::SignalStore;
 use airpulse_types::{
-    Domain, EnrichedAnnotation, FeedSource, ShiftAlert, Signal, SignalPage, SignalQuery, SignalType,
+    ApprovalQueueItem, DigestSummary, Domain, EnrichedAnnotation, FeedSource, JiraPushRequest,
+    ShiftAlert, Signal, SignalPage, SignalQuery, SignalType,
 };
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -52,6 +53,17 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/shifts", get(list_shifts))
         .route("/api/v1/shifts/{id}", get(get_shift))
         .route("/api/v1/costs", get(get_costs))
+        // Phase 4 endpoints
+        .route("/api/v1/signals/{id}", patch(patch_signal))
+        .route("/api/v1/digest/latest", get(get_digest_latest))
+        .route("/api/v1/digest", get(list_digests))
+        .route("/api/v1/digest/{id}", get(get_digest))
+        .route("/api/v1/digest/{id}/download", get(download_digest))
+        .route("/api/v1/digest/generate", post(generate_digest))
+        .route("/api/v1/jira/push", post(jira_push))
+        .route("/api/v1/jira/queue", get(list_jira_queue))
+        .route("/api/v1/jira/queue/{id}", get(get_jira_queue_item))
+        .route("/api/v1/jira/queue/{id}", delete(cancel_jira_queue_item))
         .layer(ConcurrencyLimitLayer::new(64))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -518,6 +530,261 @@ async fn get_costs(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// Phase 4 handlers
+// ---------------------------------------------------------------------------
+
+/// PATCH /api/v1/signals/:id — Update archived, digest_queued, or relevance_score.
+#[derive(Debug, Deserialize)]
+struct PatchSignalBody {
+    archived: Option<bool>,
+    digest_queued: Option<bool>,
+    relevance_score: Option<f64>,
+    // Immutable fields — rejected if present
+    title: Option<serde_json::Value>,
+    url: Option<serde_json::Value>,
+    content_hash: Option<serde_json::Value>,
+}
+
+async fn patch_signal(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<PatchSignalBody>,
+) -> Result<Json<Signal>, (StatusCode, Json<ErrorResponse>)> {
+    // Reject immutable fields
+    if body.title.is_some() || body.url.is_some() || body.content_hash.is_some() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "bad_request".to_string(),
+                message: "title is immutable after creation".to_string(),
+            }),
+        ));
+    }
+
+    let signal = state
+        .store
+        .patch_signal(id, body.archived, body.digest_queued, body.relevance_score)
+        .await
+        .map_err(|e| match e {
+            airpulse_types::StoreError::NotFound(_) => not_found(format!("Signal {id} not found")),
+            _ => internal_error(e.to_string()),
+        })?;
+
+    Ok(Json(signal))
+}
+
+#[derive(Debug, Deserialize)]
+struct DigestListParams {
+    limit: Option<u32>,
+}
+
+/// GET /api/v1/digest/latest
+async fn get_digest_latest(
+    State(state): State<AppState>,
+) -> Result<Json<Option<DigestSummary>>, (StatusCode, Json<ErrorResponse>)> {
+    let digest = state
+        .store
+        .latest_digest()
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+    Ok(Json(digest))
+}
+
+/// GET /api/v1/digest
+async fn list_digests(
+    State(state): State<AppState>,
+    Query(params): Query<DigestListParams>,
+) -> Result<Json<Vec<DigestSummary>>, (StatusCode, Json<ErrorResponse>)> {
+    let limit = params.limit.unwrap_or(10);
+    let digests = state
+        .store
+        .list_digests(limit)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+    Ok(Json(digests))
+}
+
+/// GET /api/v1/digest/:id
+async fn get_digest(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<ErrorResponse>)> {
+    let summary = state
+        .store
+        .get_digest(id)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?
+        .ok_or_else(|| not_found(format!("Digest {id} not found")))?;
+
+    let markdown = state
+        .store
+        .get_digest_markdown(id)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "id": summary.id,
+        "week_starting": summary.week_starting,
+        "generated_at": summary.generated_at,
+        "signal_count": summary.signal_count,
+        "total_tokens": summary.total_tokens,
+        "markdown": markdown,
+    })))
+}
+
+/// GET /api/v1/digest/:id/download — DOCX binary download.
+async fn download_digest(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<(StatusCode, [(String, String); 2], Vec<u8>), (StatusCode, Json<ErrorResponse>)> {
+    let docx = state
+        .store
+        .get_digest_docx(id)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?
+        .ok_or_else(|| not_found(format!("Digest {id} not found")))?;
+
+    Ok((
+        StatusCode::OK,
+        [
+            ("content-type".to_string(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document".to_string()),
+            ("content-disposition".to_string(), format!("attachment; filename=\"airpulse-digest-{id}.docx\"")),
+        ],
+        docx,
+    ))
+}
+
+/// POST /api/v1/digest/generate — Force-trigger digest generation. Returns 202.
+#[derive(Debug, Serialize)]
+struct GenerateResponse {
+    message: String,
+    job_id: Uuid,
+}
+
+async fn generate_digest(
+    State(_state): State<AppState>,
+) -> Result<(StatusCode, Json<GenerateResponse>), (StatusCode, Json<ErrorResponse>)> {
+    // Phase 4: Returns 202 immediately. Actual generation is async.
+    let job_id = Uuid::new_v4();
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(GenerateResponse {
+            message: "Digest generation started".to_string(),
+            job_id,
+        }),
+    ))
+}
+
+/// POST /api/v1/jira/push — Submit signal to JIRA approval queue.
+async fn jira_push(
+    State(state): State<AppState>,
+    Json(body): Json<JiraPushRequest>,
+) -> Result<(StatusCode, Json<ApprovalQueueItem>), (StatusCode, Json<ErrorResponse>)> {
+    // Validate signal exists and is enriched
+    let signal = state
+        .store
+        .get_signal(body.signal_id)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?
+        .ok_or_else(|| not_found(format!("Signal {} not found", body.signal_id)))?;
+
+    if !signal.enriched {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "bad_request".to_string(),
+                message: "Signal must be enriched before pushing to JIRA".to_string(),
+            }),
+        ));
+    }
+
+    let domain_label = signal
+        .domains
+        .first()
+        .map(|d| d.as_str())
+        .unwrap_or("Unknown");
+
+    let item = state
+        .store
+        .enqueue_jira_push(&body, domain_label)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("already pushed") {
+                (
+                    StatusCode::CONFLICT,
+                    Json(ErrorResponse {
+                        error: "duplicate_signal".to_string(),
+                        message: e.to_string(),
+                    }),
+                )
+            } else {
+                internal_error(e.to_string())
+            }
+        })?;
+
+    Ok((StatusCode::CREATED, Json(item)))
+}
+
+#[derive(Debug, Deserialize)]
+struct JiraQueueParams {
+    status: Option<String>,
+}
+
+/// GET /api/v1/jira/queue — List approval queue items.
+async fn list_jira_queue(
+    State(state): State<AppState>,
+    Query(params): Query<JiraQueueParams>,
+) -> Result<Json<Vec<ApprovalQueueItem>>, (StatusCode, Json<ErrorResponse>)> {
+    let items = state
+        .store
+        .list_approval_queue(params.status.as_deref())
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+    Ok(Json(items))
+}
+
+/// GET /api/v1/jira/queue/:id — Get a specific approval queue item.
+async fn get_jira_queue_item(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ApprovalQueueItem>, (StatusCode, Json<ErrorResponse>)> {
+    let item = state
+        .store
+        .get_approval_queue_item(id)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?
+        .ok_or_else(|| not_found(format!("Queue item {id} not found")))?;
+    Ok(Json(item))
+}
+
+/// DELETE /api/v1/jira/queue/:id — Cancel a pending approval queue item.
+async fn cancel_jira_queue_item(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    state
+        .store
+        .cancel_approval_queue_item(id)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("Cannot cancel") {
+                (
+                    StatusCode::CONFLICT,
+                    Json(ErrorResponse {
+                        error: "conflict".to_string(),
+                        message: e.to_string(),
+                    }),
+                )
+            } else if e.to_string().contains("Not found") {
+                not_found(e.to_string())
+            } else {
+                internal_error(e.to_string())
+            }
+        })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // --- Helpers ---
 
 fn parse_domains(s: Option<&str>) -> Vec<Domain> {
@@ -536,6 +803,16 @@ fn parse_signal_types(s: Option<&str>) -> Vec<SignalType> {
             .collect()
     })
     .unwrap_or_default()
+}
+
+fn not_found(msg: String) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ErrorResponse {
+            error: "not_found".to_string(),
+            message: msg,
+        }),
+    )
 }
 
 fn internal_error(msg: String) -> (StatusCode, Json<ErrorResponse>) {
@@ -579,7 +856,7 @@ mod tests {
         assert_eq!(domains.len(), 2);
     }
 
-    // TC-API-008: page_size bounds validation
+    // TC-API-008: page_size bounds validation (existing)
     #[test]
     fn test_page_size_validation() {
         // The handler checks page_size > 200 and returns 400

@@ -1,4 +1,4 @@
-import type { Signal, SignalPage, EnrichedAnnotation, ShiftAlert, FeedSource, HealthResponse, EnrichmentQueueStatus, StatsResponse } from '@/types';
+import type { Signal, SignalPage, EnrichedAnnotation, ShiftAlert, FeedSource, HealthResponse, EnrichmentQueueStatus, StatsResponse, DigestSummary, DigestDetail, ApprovalQueueItem } from '@/types';
 
 const now = new Date().toISOString();
 const recent = new Date(Date.now() - 60_000).toISOString();
@@ -244,3 +244,87 @@ export const FIXTURE_STATS: StatsResponse = {
   polls_last_hour: 42,
   errors_last_hour: 2,
 };
+
+// ---------------------------------------------------------------------------
+// Phase 4 fixtures
+// ---------------------------------------------------------------------------
+
+export const FIXTURE_DIGESTS: DigestSummary[] = [
+  {
+    id: 'digest-001',
+    week_starting: '2026-03-16',
+    generated_at: now,
+    signal_count: 47,
+    total_tokens: 3200,
+  },
+  {
+    id: 'digest-002',
+    week_starting: '2026-03-09',
+    generated_at: new Date(Date.now() - 7 * 86400_000).toISOString(),
+    signal_count: 38,
+    total_tokens: 2800,
+  },
+  {
+    id: 'digest-003',
+    week_starting: '2026-03-02',
+    generated_at: new Date(Date.now() - 14 * 86400_000).toISOString(),
+    signal_count: 42,
+    total_tokens: 3100,
+  },
+];
+
+export const FIXTURE_DIGEST_DETAIL: DigestDetail = {
+  ...FIXTURE_DIGESTS[0],
+  markdown: `# AirPulse Weekly Intelligence Digest\n**Week of 2026-03-16** | Generated ${now} | 47 signals analysed\n\n---\n\n## This Week's Shift Signals\nAI product launches surged this week with z=3.7, driven by...\n\n## Competitor Moves\nComcast's $2.1B acquisition signals consolidation...\n\n## Technology on the Rise\nGenAI metadata tagging adoption accelerated...\n\n## Roadmap Implications\nATSC 3.0 reaching 60% coverage requires AirCast prioritization...\n\n## Watch Next Week\nNAB Show preparations intensifying...`,
+};
+
+export const FIXTURE_APPROVAL_QUEUE: ApprovalQueueItem[] = [
+  {
+    id: 'aq-001',
+    signal_id: 'sig-001',
+    status: 'Pending',
+    jira_project: 'AIRFORGE',
+    jira_issue_key: null,
+    ticket_title: '[AirPulse] PRODUCT: Harmonic launches cloud-native playout',
+    ticket_body: 'Signal body',
+    spoke_label: 'AirCast',
+    domain_label: 'Broadcast',
+    submitted_by: 'hive-dev-01',
+    submitted_at: now,
+    pushed_at: null,
+    attempts: 0,
+    last_error: null,
+  },
+  {
+    id: 'aq-002',
+    signal_id: 'sig-002',
+    status: 'Pushed',
+    jira_project: 'AIRFORGE',
+    jira_issue_key: 'AIRFORGE-142',
+    ticket_title: '[AirPulse] M&A: Comcast acquires streaming analytics firm',
+    ticket_body: 'Signal body',
+    spoke_label: 'AirBase',
+    domain_label: 'OTT',
+    submitted_by: 'hive-dev-01',
+    submitted_at: new Date(Date.now() - 3600_000).toISOString(),
+    pushed_at: new Date(Date.now() - 3500_000).toISOString(),
+    attempts: 1,
+    last_error: null,
+  },
+  {
+    id: 'aq-003',
+    signal_id: 'sig-003',
+    status: 'Failed',
+    jira_project: 'AIRFORGE',
+    jira_issue_key: null,
+    ticket_title: '[AirPulse] PARTNER: FIFA partners with AWS on AI analytics',
+    ticket_body: 'Signal body',
+    spoke_label: 'AirPulse',
+    domain_label: 'Sports',
+    submitted_by: 'hive-dev-01',
+    submitted_at: new Date(Date.now() - 7200_000).toISOString(),
+    pushed_at: null,
+    attempts: 3,
+    last_error: 'Atlassian API error: HTTP 500 — Internal Server Error',
+  },
+];

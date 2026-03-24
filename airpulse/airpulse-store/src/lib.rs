@@ -4,11 +4,13 @@
 //! typed query methods for the REST API layer.
 
 use airpulse_types::{
-    BaselineKey, CircuitState, ClassifiedItem, Domain, EnrichedAnnotation, EnrichmentCost,
-    FeedSource, KeywordHit, PollEvent, PropagandaRisk, ShiftAlert, ShiftSeverity, Signal,
-    SignalPage, SignalQuery, SignalType, SourceTier, StoreError, WelfordState,
+    ApprovalQueueItem, ApprovalStatus, BaselineKey, CircuitState, ClassifiedItem,
+    DigestDocument, DigestSummary, Domain,
+    EnrichedAnnotation, EnrichmentCost, FeedSource, JiraPushRequest, KeywordHit,
+    PollEvent, PropagandaRisk, ShiftAlert, ShiftSeverity, Signal, SignalPage, SignalQuery,
+    SignalType, SourceTier, StoreError, WelfordState,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -77,6 +79,25 @@ impl SignalStore {
 
         let v006 = include_str!("../migrations/V006__create_enrichment_costs.sql");
         sqlx::raw_sql(v006)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        // Phase 4 migrations
+        let v007 = include_str!("../migrations/V007__add_phase4_signal_columns.sql");
+        sqlx::raw_sql(v007)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v008 = include_str!("../migrations/V008__create_digest_documents.sql");
+        sqlx::raw_sql(v008)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v009 = include_str!("../migrations/V009__create_approval_queue.sql");
+        sqlx::raw_sql(v009)
             .execute(&self.pool)
             .await
             .map_err(|e| StoreError::Migration(e.to_string()))?;
@@ -1075,6 +1096,426 @@ fn row_to_feed_source(row: &sqlx::postgres::PgRow) -> Result<FeedSource, StoreEr
     })
 }
 
+impl SignalStore {
+    // ------------------------------------------------------------------
+    // Phase 4 store methods
+    // ------------------------------------------------------------------
+
+    /// Patch a signal: update archived, digest_queued, or relevance_score (§7, PATCH).
+    pub async fn patch_signal(
+        &self,
+        id: Uuid,
+        archived: Option<bool>,
+        digest_queued: Option<bool>,
+        relevance_score: Option<f64>,
+    ) -> Result<Signal, StoreError> {
+        // Check signal exists
+        let existing = self.get_signal(id).await?;
+        if existing.is_none() {
+            return Err(StoreError::NotFound(format!("signal {id}")));
+        }
+
+        if let Some(v) = archived {
+            sqlx::query("UPDATE airpulse.signals SET archived = $1 WHERE id = $2")
+                .bind(v)
+                .bind(id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| StoreError::Database(e.to_string()))?;
+        }
+        if let Some(v) = digest_queued {
+            sqlx::query("UPDATE airpulse.signals SET digest_queued = $1 WHERE id = $2")
+                .bind(v)
+                .bind(id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| StoreError::Database(e.to_string()))?;
+        }
+        if let Some(v) = relevance_score {
+            sqlx::query("UPDATE airpulse.signals SET relevance_score = $1 WHERE id = $2")
+                .bind(v as f32)
+                .bind(id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| StoreError::Database(e.to_string()))?;
+        }
+
+        self.get_signal(id)
+            .await?
+            .ok_or_else(|| StoreError::NotFound(format!("signal {id}")))
+    }
+
+    /// Update the jira_issue_key on a signal after successful JIRA push.
+    pub async fn set_signal_jira_key(&self, id: Uuid, key: &str) -> Result<(), StoreError> {
+        sqlx::query("UPDATE airpulse.signals SET jira_issue_key = $1 WHERE id = $2")
+            .bind(key)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    // --- Digest store methods ---
+
+    /// Save a digest document.
+    pub async fn save_digest(&self, doc: &DigestDocument) -> Result<Uuid, StoreError> {
+        let signal_ids: Vec<Uuid> = doc.signal_ids.clone();
+        sqlx::query(
+            r#"
+            INSERT INTO airpulse.digest_documents
+                (id, week_starting, generated_at, prompt_version, model,
+                 total_input_tokens, total_output_tokens,
+                 shift_signals_body, competitor_moves_body, technology_trends_body,
+                 roadmap_implications_body, watch_next_week_body,
+                 signal_ids, markdown_output, docx_output)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            "#,
+        )
+        .bind(doc.id)
+        .bind(doc.week_starting)
+        .bind(doc.generated_at)
+        .bind(&doc.prompt_version)
+        .bind(&doc.model)
+        .bind(doc.total_input_tokens as i32)
+        .bind(doc.total_output_tokens as i32)
+        .bind(&doc.sections.shift_signals.body)
+        .bind(&doc.sections.competitor_moves.body)
+        .bind(&doc.sections.technology_trends.body)
+        .bind(&doc.sections.roadmap_implications.body)
+        .bind(&doc.sections.watch_next_week.body)
+        .bind(&signal_ids)
+        .bind(&doc.markdown)
+        .bind(&doc.docx_bytes)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(doc.id)
+    }
+
+    /// Get the latest digest.
+    pub async fn latest_digest(&self) -> Result<Option<DigestSummary>, StoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, week_starting, generated_at,
+                   array_length(signal_ids, 1) as signal_count,
+                   total_input_tokens + total_output_tokens as total_tokens
+            FROM airpulse.digest_documents
+            ORDER BY week_starting DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.map(|r| DigestSummary {
+            id: r.get("id"),
+            week_starting: r.get("week_starting"),
+            generated_at: r.get("generated_at"),
+            signal_count: r.get::<Option<i32>, _>("signal_count").unwrap_or(0) as u32,
+            total_tokens: r.get::<i32, _>("total_tokens") as u32,
+        }))
+    }
+
+    /// Get a digest by ID (markdown only, not DOCX bytes).
+    pub async fn get_digest(&self, id: Uuid) -> Result<Option<DigestSummary>, StoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, week_starting, generated_at,
+                   array_length(signal_ids, 1) as signal_count,
+                   total_input_tokens + total_output_tokens as total_tokens
+            FROM airpulse.digest_documents
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.map(|r| DigestSummary {
+            id: r.get("id"),
+            week_starting: r.get("week_starting"),
+            generated_at: r.get("generated_at"),
+            signal_count: r.get::<Option<i32>, _>("signal_count").unwrap_or(0) as u32,
+            total_tokens: r.get::<i32, _>("total_tokens") as u32,
+        }))
+    }
+
+    /// Get digest markdown by ID.
+    pub async fn get_digest_markdown(&self, id: Uuid) -> Result<Option<String>, StoreError> {
+        let row = sqlx::query("SELECT markdown_output FROM airpulse.digest_documents WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.map(|r| r.get("markdown_output")))
+    }
+
+    /// Get digest DOCX bytes by ID.
+    pub async fn get_digest_docx(&self, id: Uuid) -> Result<Option<Vec<u8>>, StoreError> {
+        let row = sqlx::query("SELECT docx_output FROM airpulse.digest_documents WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.map(|r| r.get("docx_output")))
+    }
+
+    /// List digest summaries.
+    pub async fn list_digests(&self, limit: u32) -> Result<Vec<DigestSummary>, StoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, week_starting, generated_at,
+                   array_length(signal_ids, 1) as signal_count,
+                   total_input_tokens + total_output_tokens as total_tokens
+            FROM airpulse.digest_documents
+            ORDER BY week_starting DESC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit as i32)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(rows
+            .iter()
+            .map(|r| DigestSummary {
+                id: r.get("id"),
+                week_starting: r.get("week_starting"),
+                generated_at: r.get("generated_at"),
+                signal_count: r.get::<Option<i32>, _>("signal_count").unwrap_or(0) as u32,
+                total_tokens: r.get::<i32, _>("total_tokens") as u32,
+            })
+            .collect())
+    }
+
+    /// Check if digest exists for given week.
+    pub async fn digest_exists_for_week(&self, week: NaiveDate) -> Result<bool, StoreError> {
+        let row = sqlx::query("SELECT 1 FROM airpulse.digest_documents WHERE week_starting = $1")
+            .bind(week)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.is_some())
+    }
+
+    // --- Approval queue methods ---
+
+    /// Enqueue a JIRA push request.
+    pub async fn enqueue_jira_push(
+        &self,
+        req: &JiraPushRequest,
+        domain_label: &str,
+    ) -> Result<ApprovalQueueItem, StoreError> {
+        let id = Uuid::new_v4();
+        let now = Utc::now();
+
+        // Check for existing Pushed item for this signal
+        let existing = sqlx::query(
+            "SELECT jira_issue_key FROM airpulse.approval_queue WHERE signal_id = $1 AND status = 'Pushed'",
+        )
+        .bind(req.signal_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        if let Some(row) = existing {
+            let key: Option<String> = row.get("jira_issue_key");
+            return Err(StoreError::Database(format!(
+                "Signal already pushed as {}",
+                key.unwrap_or_default()
+            )));
+        }
+
+        sqlx::query(
+            r#"
+            INSERT INTO airpulse.approval_queue
+                (id, signal_id, status, ticket_title, ticket_body, spoke_label,
+                 domain_label, submitted_by, submitted_at)
+            VALUES ($1, $2, 'Pending', $3, $4, $5, $6, $7, $8)
+            "#,
+        )
+        .bind(id)
+        .bind(req.signal_id)
+        .bind(&req.ticket_title)
+        .bind(&req.ticket_body)
+        .bind(&req.spoke_label)
+        .bind(domain_label)
+        .bind(&req.submitted_by)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(ApprovalQueueItem {
+            id,
+            signal_id: req.signal_id,
+            status: ApprovalStatus::Pending,
+            jira_project: "AIRFORGE".to_string(),
+            jira_issue_key: None,
+            ticket_title: req.ticket_title.clone(),
+            ticket_body: req.ticket_body.clone(),
+            spoke_label: req.spoke_label.clone(),
+            domain_label: domain_label.to_string(),
+            submitted_by: req.submitted_by.clone(),
+            submitted_at: now,
+            pushed_at: None,
+            attempts: 0,
+            last_error: None,
+        })
+    }
+
+    /// List approval queue items with optional status filter.
+    pub async fn list_approval_queue(
+        &self,
+        status: Option<&str>,
+    ) -> Result<Vec<ApprovalQueueItem>, StoreError> {
+        let rows = if let Some(s) = status {
+            sqlx::query(
+                "SELECT * FROM airpulse.approval_queue WHERE status = $1 ORDER BY submitted_at DESC",
+            )
+            .bind(s)
+            .fetch_all(&self.pool)
+            .await
+        } else {
+            sqlx::query("SELECT * FROM airpulse.approval_queue ORDER BY submitted_at DESC")
+                .fetch_all(&self.pool)
+                .await
+        }
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(rows.iter().map(|r| parse_approval_queue_row(r)).collect())
+    }
+
+    /// Get a single approval queue item.
+    pub async fn get_approval_queue_item(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<ApprovalQueueItem>, StoreError> {
+        let row = sqlx::query("SELECT * FROM airpulse.approval_queue WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.map(|r| parse_approval_queue_row(&r)))
+    }
+
+    /// Cancel a pending approval queue item.
+    pub async fn cancel_approval_queue_item(&self, id: Uuid) -> Result<(), StoreError> {
+        let item = self.get_approval_queue_item(id).await?;
+        match item {
+            None => Err(StoreError::NotFound(format!("approval queue item {id}"))),
+            Some(item) if item.status != ApprovalStatus::Pending => {
+                Err(StoreError::Database(format!(
+                    "Cannot cancel item in {} state",
+                    item.status
+                )))
+            }
+            _ => {
+                sqlx::query("UPDATE airpulse.approval_queue SET status = 'Cancelled' WHERE id = $1")
+                    .bind(id)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|e| StoreError::Database(e.to_string()))?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Take the oldest pending item and atomically set to Pushing.
+    pub async fn take_pending_approval(&self) -> Result<Option<ApprovalQueueItem>, StoreError> {
+        let row = sqlx::query(
+            r#"
+            UPDATE airpulse.approval_queue
+            SET status = 'Pushing'
+            WHERE id = (
+                SELECT id FROM airpulse.approval_queue
+                WHERE status = 'Pending'
+                ORDER BY submitted_at ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+            )
+            RETURNING *
+            "#,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.map(|r| parse_approval_queue_row(&r)))
+    }
+
+    /// Mark an approval queue item as Pushed.
+    pub async fn mark_approval_pushed(
+        &self,
+        id: Uuid,
+        issue_key: &str,
+    ) -> Result<(), StoreError> {
+        sqlx::query(
+            "UPDATE airpulse.approval_queue SET status = 'Pushed', jira_issue_key = $1, pushed_at = NOW() WHERE id = $2",
+        )
+        .bind(issue_key)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Mark an approval queue item as Failed or retry-pending.
+    pub async fn mark_approval_failed(
+        &self,
+        id: Uuid,
+        error: &str,
+        max_retries: u32,
+    ) -> Result<(), StoreError> {
+        sqlx::query(
+            r#"
+            UPDATE airpulse.approval_queue
+            SET attempts = attempts + 1,
+                last_error = $1,
+                status = CASE WHEN attempts + 1 >= $2 THEN 'Failed' ELSE 'Pending' END
+            WHERE id = $3
+            "#,
+        )
+        .bind(error)
+        .bind(max_retries as i32)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+        Ok(())
+    }
+}
+
+fn parse_approval_queue_row(r: &sqlx::postgres::PgRow) -> ApprovalQueueItem {
+    let status_str: String = r.get("status");
+    ApprovalQueueItem {
+        id: r.get("id"),
+        signal_id: r.get("signal_id"),
+        status: status_str.parse().unwrap_or(ApprovalStatus::Pending),
+        jira_project: r.get("jira_project"),
+        jira_issue_key: r.get("jira_issue_key"),
+        ticket_title: r.get("ticket_title"),
+        ticket_body: r.get("ticket_body"),
+        spoke_label: r.get("spoke_label"),
+        domain_label: r.get("domain_label"),
+        submitted_by: r.get("submitted_by"),
+        submitted_at: r.get("submitted_at"),
+        pushed_at: r.get("pushed_at"),
+        attempts: r.get::<i32, _>("attempts") as u32,
+        last_error: r.get("last_error"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1084,5 +1525,12 @@ mod tests {
         let q = SignalQuery::default();
         assert_eq!(q.effective_page(), 1);
         assert_eq!(q.effective_page_size(), 50);
+    }
+
+    #[test]
+    fn test_approval_status_parsing() {
+        assert_eq!("Pending".parse::<ApprovalStatus>().unwrap(), ApprovalStatus::Pending);
+        assert_eq!("Pushed".parse::<ApprovalStatus>().unwrap(), ApprovalStatus::Pushed);
+        assert!("Invalid".parse::<ApprovalStatus>().is_err());
     }
 }

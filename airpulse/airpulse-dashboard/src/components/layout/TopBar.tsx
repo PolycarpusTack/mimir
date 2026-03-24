@@ -3,10 +3,13 @@ import { useHealth } from '@/api/health';
 import { useUIStore, type ActivePanel } from '@/store/ui';
 import { formatClock } from '@/utils';
 
+import { ApprovalQueueStatus } from './ApprovalQueueStatus';
+
 const TABS: { key: ActivePanel; label: string }[] = [
   { key: 'shift', label: 'Shift Radar' },
   { key: 'vendors', label: 'Vendors' },
   { key: 'tech', label: 'Tech Trends' },
+  { key: 'digest', label: 'Digest' },
 ];
 
 export const TopBar: React.FC = () => {
@@ -93,6 +96,9 @@ export const TopBar: React.FC = () => {
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
+
+      {/* Approval queue status */}
+      <ApprovalQueueStatus />
 
       {/* Metric tiles */}
       <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>

@@ -15,3 +15,5 @@ export type {
   StatsResponse,
   EnrichmentQueueStatus,
 } from './health';
+export type { DigestSummary, DigestDetail } from './digest';
+export type { ApprovalStatus, ApprovalQueueItem, JiraPushRequest } from './jira';

@@ -10,6 +10,8 @@ pub struct AirPulseConfig {
     pub circuit_breaker: CircuitBreakerConfig,
     pub enrichment: EnrichmentConfig,
     pub baseline: BaselineConfig,
+    pub digest: DigestConfig,
+    pub jira: JiraConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,6 +161,62 @@ impl Default for BaselineConfig {
             cooldown_elevated_secs: 7200,
             cooldown_spike_secs: 14400,
             cooldown_surge_secs: 28800,
+        }
+    }
+}
+
+/// Digest generation configuration (Phase 4, §5.1).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DigestConfig {
+    pub cron_expression: String,
+    pub model: String,
+    pub prompt_version: String,
+    pub max_tokens_per_section: u32,
+    pub total_input_budget: u32,
+    pub total_output_budget: u32,
+    pub max_retries: u32,
+    pub retry_delay_secs: u64,
+}
+
+impl Default for DigestConfig {
+    fn default() -> Self {
+        Self {
+            cron_expression: "0 7 * * 1".to_string(),
+            model: "claude-sonnet-4-6".to_string(),
+            prompt_version: "digest-v1".to_string(),
+            max_tokens_per_section: 600,
+            total_input_budget: 3500,
+            total_output_budget: 3000,
+            max_retries: 3,
+            retry_delay_secs: 1800,
+        }
+    }
+}
+
+/// JIRA connector configuration (Phase 4, §6.3.5).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JiraConfig {
+    pub base_url: String,
+    pub user_email: String,
+    pub api_token: String,
+    pub project_key: String,
+    pub issue_type: String,
+    pub signal_custom_field: Option<String>,
+    pub worker_poll_secs: u64,
+    pub max_retries: u32,
+}
+
+impl Default for JiraConfig {
+    fn default() -> Self {
+        Self {
+            base_url: "https://mediagenix.atlassian.net".to_string(),
+            user_email: String::new(),
+            api_token: String::new(),
+            project_key: "AIRFORGE".to_string(),
+            issue_type: "Story".to_string(),
+            signal_custom_field: None,
+            worker_poll_secs: 10,
+            max_retries: 3,
         }
     }
 }

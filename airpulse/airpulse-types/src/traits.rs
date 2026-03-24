@@ -4,11 +4,13 @@
 //! specified in §5.1.2, §5.2.2, §5.3.4, §5.4.2, §5.5.2 of the spec.
 
 use crate::{
-    AggregatorHealth, BaselineError, BaselineKey, CircuitState, ClassifiedItem, ClassifyError,
-    DedupError, DedupStats, EnqueueResult, EnrichError, EnrichedAnnotation, FeedSource,
-    IngestError, NormalisedItem, PollEvent, PollResult, ShiftAlert, Signal, SignalPage,
-    SignalQuery, StoreError, WelfordState,
+    AggregatorHealth, ApprovalQueueItem, ApprovalStatus, BaselineError, BaselineKey, CircuitState,
+    ClassifiedItem, ClassifyError, DedupError, DedupStats, DigestDocument, DigestError,
+    DigestSummary, EnqueueResult, EnrichError, EnrichedAnnotation, FeedSource, IngestError,
+    JiraError, JiraPushRequest, JiraTicket, JiraWorkerHealth, NormalisedItem, PollEvent,
+    PollResult, ShiftAlert, Signal, SignalPage, SignalQuery, StoreError, WelfordState,
 };
+use chrono::{DateTime, NaiveDate, Utc};
 use uuid::Uuid;
 
 /// Feed aggregator interface (§5.1.2).
@@ -96,4 +98,51 @@ pub trait BaselineEngineTrait: Send + Sync {
     async fn get_state(&self, key: &BaselineKey) -> Result<Option<WelfordState>, BaselineError>;
     async fn list_active_alerts(&self) -> Result<Vec<ShiftAlert>, BaselineError>;
     async fn resolve_alert(&self, id: Uuid) -> Result<(), BaselineError>;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 trait interfaces
+// ---------------------------------------------------------------------------
+
+/// Digest scheduler interface (§5.1.2).
+#[allow(async_fn_in_trait)]
+pub trait DigestSchedulerTrait: Send + Sync {
+    async fn start(&self) -> Result<(), DigestError>;
+    async fn stop(&self) -> Result<(), DigestError>;
+    async fn force_generate(&self) -> Result<Uuid, DigestError>;
+    fn next_scheduled(&self) -> DateTime<Utc>;
+}
+
+/// Digest store interface (§5.5).
+#[allow(async_fn_in_trait)]
+pub trait DigestStoreTrait: Send + Sync {
+    async fn save(&self, doc: &DigestDocument) -> Result<Uuid, DigestError>;
+    async fn latest(&self) -> Result<Option<DigestDocument>, DigestError>;
+    async fn get(&self, id: Uuid) -> Result<Option<DigestDocument>, DigestError>;
+    async fn list(&self, limit: u32) -> Result<Vec<DigestSummary>, DigestError>;
+    async fn exists_for_week(&self, week: NaiveDate) -> Result<bool, DigestError>;
+}
+
+/// JIRA approval queue interface (§6.1.2).
+#[allow(async_fn_in_trait)]
+pub trait ApprovalQueueTrait: Send + Sync {
+    async fn enqueue(&self, req: JiraPushRequest) -> Result<ApprovalQueueItem, JiraError>;
+    async fn cancel(&self, id: Uuid) -> Result<(), JiraError>;
+    async fn list(&self, status: Option<ApprovalStatus>) -> Result<Vec<ApprovalQueueItem>, JiraError>;
+    async fn get(&self, id: Uuid) -> Result<Option<ApprovalQueueItem>, JiraError>;
+}
+
+/// JIRA worker interface (§6.2.2).
+#[allow(async_fn_in_trait)]
+pub trait JiraWorkerTrait: Send + Sync {
+    async fn start(&self) -> Result<(), JiraError>;
+    async fn stop(&self) -> Result<(), JiraError>;
+    fn health(&self) -> JiraWorkerHealth;
+}
+
+/// Atlassian API client interface (§6.3.4).
+#[allow(async_fn_in_trait)]
+pub trait AtlassianClientTrait: Send + Sync {
+    async fn create_issue(&self, ticket: &JiraTicket) -> Result<String, JiraError>;
+    async fn health_check(&self) -> Result<(), JiraError>;
 }
