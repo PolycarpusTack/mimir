@@ -3,10 +3,14 @@
 //! Axum-based REST API providing endpoints for signals, sources,
 //! health monitoring, and statistics. Rate limited via tower.
 
+use airpulse_baseline::alerts::alert_label;
+use airpulse_enrich::queue::EnrichmentQueue;
 use airpulse_ingest::circuit::CircuitBreaker;
 use airpulse_ingest::scheduler::FeedScheduler;
 use airpulse_store::SignalStore;
-use airpulse_types::{Domain, FeedSource, Signal, SignalPage, SignalQuery, SignalType};
+use airpulse_types::{
+    Domain, EnrichedAnnotation, FeedSource, ShiftAlert, Signal, SignalPage, SignalQuery, SignalType,
+};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -26,17 +30,28 @@ pub struct AppState {
     pub store: SignalStore,
     pub circuit_breaker: Arc<CircuitBreaker>,
     pub scheduler: Option<Arc<FeedScheduler>>,
+    pub enrichment_queue: Option<Arc<EnrichmentQueue>>,
 }
 
 /// Build the API router with rate limiting.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        // Phase 1 endpoints
         .route("/api/v1/signals", get(list_signals))
         .route("/api/v1/signals/{id}", get(get_signal))
         .route("/api/v1/sources", get(list_sources))
         .route("/api/v1/sources/{id}/poll", post(force_poll))
         .route("/api/v1/health", get(health_check))
         .route("/api/v1/stats", get(stats))
+        // Phase 2 endpoints
+        .route(
+            "/api/v1/signals/{id}/enrichment",
+            get(get_signal_enrichment),
+        )
+        .route("/api/v1/enrichment/queue", get(get_enrichment_queue))
+        .route("/api/v1/shifts", get(list_shifts))
+        .route("/api/v1/shifts/{id}", get(get_shift))
+        .route("/api/v1/costs", get(get_costs))
         .layer(ConcurrencyLimitLayer::new(64))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -274,6 +289,232 @@ async fn stats(
         dedup_rate,
         polls_last_hour: polls,
         errors_last_hour: errors,
+    }))
+}
+
+// --- Phase 2 Request/Response types ---
+
+#[derive(Debug, Serialize)]
+struct EnrichmentQueueResponse {
+    depth: u64,
+    inflight: u64,
+    rate_per_min: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct ShiftQueryParams {
+    domain: Option<String>,
+    severity: Option<String>,
+    after: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ShiftAlertResponse {
+    id: String,
+    domain: String,
+    signal_type: String,
+    z_score: f64,
+    severity: String,
+    observed: f64,
+    baseline_mean: f64,
+    baseline_std: f64,
+    signal_count: u32,
+    label: String,
+    fired_at: String,
+    cooldown_until: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ShiftsListResponse {
+    alerts: Vec<ShiftAlertResponse>,
+    total: usize,
+    as_of: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CostQueryParams {
+    after: Option<String>,
+    before: Option<String>,
+    domain: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct CostReportResponse {
+    rows: Vec<airpulse_store::CostReportRow>,
+    total_input_tokens: u64,
+    total_output_tokens: u64,
+    total_calls: u64,
+}
+
+// --- Phase 2 Handlers ---
+
+/// GET /api/v1/signals/:id/enrichment
+async fn get_signal_enrichment(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<EnrichedAnnotation>, (StatusCode, Json<ErrorResponse>)> {
+    let uuid = Uuid::parse_str(&id).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "bad_request".to_string(),
+                message: format!("Invalid UUID: {id}"),
+            }),
+        )
+    })?;
+
+    let enrichment = state
+        .store
+        .get_enrichment(uuid)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+
+    match enrichment {
+        Some(ann) => Ok(Json(ann)),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "not_found".to_string(),
+                message: format!("Enrichment not found for signal {id}"),
+            }),
+        )),
+    }
+}
+
+/// GET /api/v1/enrichment/queue
+async fn get_enrichment_queue(
+    State(state): State<AppState>,
+) -> Result<Json<EnrichmentQueueResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match &state.enrichment_queue {
+        Some(queue) => {
+            let depth = queue.depth().await.unwrap_or(0);
+            let inflight = queue.inflight_count().await.unwrap_or(0);
+            Ok(Json(EnrichmentQueueResponse {
+                depth,
+                inflight,
+                rate_per_min: 0, // TODO: implement rate tracking
+            }))
+        }
+        None => Ok(Json(EnrichmentQueueResponse {
+            depth: 0,
+            inflight: 0,
+            rate_per_min: 0,
+        })),
+    }
+}
+
+/// GET /api/v1/shifts
+async fn list_shifts(
+    State(state): State<AppState>,
+    Query(params): Query<ShiftQueryParams>,
+) -> Result<Json<ShiftsListResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let after = params
+        .after
+        .as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc));
+
+    let alerts = state
+        .store
+        .list_active_shift_alerts(
+            params.domain.as_deref(),
+            params.severity.as_deref(),
+            after,
+        )
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+
+    let total = alerts.len();
+    let alert_responses: Vec<ShiftAlertResponse> = alerts
+        .iter()
+        .map(|a| ShiftAlertResponse {
+            id: a.id.to_string(),
+            domain: a.key.domain.as_str().to_string(),
+            signal_type: a.key.signal_type.as_str().to_string(),
+            z_score: a.z_score,
+            severity: a.severity.as_str().to_string(),
+            observed: a.observed,
+            baseline_mean: a.baseline_mean,
+            baseline_std: a.baseline_std,
+            signal_count: a.signal_count,
+            label: alert_label(a),
+            fired_at: a.fired_at.to_rfc3339(),
+            cooldown_until: a.cooldown_until.to_rfc3339(),
+        })
+        .collect();
+
+    Ok(Json(ShiftsListResponse {
+        alerts: alert_responses,
+        total,
+        as_of: chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+/// GET /api/v1/shifts/:id
+async fn get_shift(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ShiftAlert>, (StatusCode, Json<ErrorResponse>)> {
+    let uuid = Uuid::parse_str(&id).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "bad_request".to_string(),
+                message: format!("Invalid UUID: {id}"),
+            }),
+        )
+    })?;
+
+    let alert = state
+        .store
+        .get_shift_alert(uuid)
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+
+    match alert {
+        Some(a) => Ok(Json(a)),
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "not_found".to_string(),
+                message: format!("Shift alert {id} not found"),
+            }),
+        )),
+    }
+}
+
+/// GET /api/v1/costs
+async fn get_costs(
+    State(state): State<AppState>,
+    Query(params): Query<CostQueryParams>,
+) -> Result<Json<CostReportResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let after = params
+        .after
+        .as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc));
+
+    let before = params
+        .before
+        .as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc));
+
+    let rows = state
+        .store
+        .get_cost_report(after, before, params.domain.as_deref())
+        .await
+        .map_err(|e| internal_error(e.to_string()))?;
+
+    let total_input: u64 = rows.iter().map(|r| r.total_input_tokens).sum();
+    let total_output: u64 = rows.iter().map(|r| r.total_output_tokens).sum();
+    let total_calls: u64 = rows.iter().map(|r| r.call_count).sum();
+
+    Ok(Json(CostReportResponse {
+        rows,
+        total_input_tokens: total_input,
+        total_output_tokens: total_output,
+        total_calls,
     }))
 }
 

@@ -4,9 +4,10 @@
 //! specified in §5.1.2, §5.2.2, §5.3.4, §5.4.2, §5.5.2 of the spec.
 
 use crate::{
-    AggregatorHealth, CircuitState, ClassifiedItem, ClassifyError, DedupError, DedupStats,
-    FeedSource, IngestError, NormalisedItem, PollEvent, PollResult, Signal, SignalPage,
-    SignalQuery, StoreError,
+    AggregatorHealth, BaselineError, BaselineKey, CircuitState, ClassifiedItem, ClassifyError,
+    DedupError, DedupStats, EnqueueResult, EnrichError, EnrichedAnnotation, FeedSource,
+    IngestError, NormalisedItem, PollEvent, PollResult, ShiftAlert, Signal, SignalPage,
+    SignalQuery, StoreError, WelfordState,
 };
 use uuid::Uuid;
 
@@ -59,4 +60,40 @@ pub trait CircuitBreakerTrait: Send + Sync {
     fn record_success(&self, source_id: Uuid);
     fn record_failure(&self, source_id: Uuid);
     fn should_attempt(&self, source_id: Uuid) -> bool;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 trait interfaces
+// ---------------------------------------------------------------------------
+
+/// Enrichment queue interface (§6.1.2).
+#[allow(async_fn_in_trait)]
+pub trait EnrichmentQueueTrait: Send + Sync {
+    async fn enqueue(&self, signal: &Signal) -> Result<EnqueueResult, EnrichError>;
+    async fn dequeue(&self) -> Result<Option<Uuid>, EnrichError>;
+    async fn depth(&self) -> Result<u64, EnrichError>;
+    async fn apply_cached(
+        &self,
+        signal_id: Uuid,
+        annotation: EnrichedAnnotation,
+    ) -> Result<(), EnrichError>;
+}
+
+/// Claude API client interface (§6.2.2).
+#[allow(async_fn_in_trait)]
+pub trait ClaudeClientTrait: Send + Sync {
+    async fn enrich(
+        &self,
+        signal: &Signal,
+        template: &crate::config::EnrichmentConfig,
+    ) -> Result<EnrichedAnnotation, EnrichError>;
+}
+
+/// Baseline engine interface (§6.3.3).
+#[allow(async_fn_in_trait)]
+pub trait BaselineEngineTrait: Send + Sync {
+    async fn tick(&self) -> Result<Vec<ShiftAlert>, BaselineError>;
+    async fn get_state(&self, key: &BaselineKey) -> Result<Option<WelfordState>, BaselineError>;
+    async fn list_active_alerts(&self) -> Result<Vec<ShiftAlert>, BaselineError>;
+    async fn resolve_alert(&self, id: Uuid) -> Result<(), BaselineError>;
 }

@@ -96,6 +96,7 @@ async fn main() -> anyhow::Result<()> {
         store,
         circuit_breaker,
         scheduler: Some(scheduler),
+        enrichment_queue: None, // Phase 2: initialized when enrichment pipeline is configured
     };
     let app = build_router(app_state);
 

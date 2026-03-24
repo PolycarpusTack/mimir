@@ -1,16 +1,12 @@
 [package]
-name = "airpulse-api"
+name = "airpulse-baseline"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
 [dependencies]
 airpulse-types = { path = "../airpulse-types" }
-airpulse-classify = { path = "../airpulse-classify" }
 airpulse-store = { path = "../airpulse-store" }
-airpulse-ingest = { path = "../airpulse-ingest" }
-airpulse-enrich = { path = "../airpulse-enrich" }
-airpulse-baseline = { path = "../airpulse-baseline" }
 uuid = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
@@ -18,12 +14,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-axum = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true }
-anyhow = "1"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-reqwest = { workspace = true }
+proptest = { workspace = true }

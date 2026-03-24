@@ -15,7 +15,9 @@ dependencies = [
 name = "airpulse-api"
 version = "0.1.0"
 dependencies = [
+ "airpulse-baseline",
  "airpulse-classify",
+ "airpulse-enrich",
  "airpulse-ingest",
  "airpulse-store",
  "airpulse-types",
@@ -35,6 +37,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "airpulse-baseline"
+version = "0.1.0"
+dependencies = [
+ "airpulse-store",
+ "airpulse-types",
+ "chrono",
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "airpulse-classify"
 version = "0.1.0"
 dependencies = [
@@ -47,6 +65,23 @@ dependencies = [
  "serde_json",
  "thiserror",
  "toml",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "airpulse-enrich"
+version = "0.1.0"
+dependencies = [
+ "airpulse-store",
+ "airpulse-types",
+ "chrono",
+ "redis",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
  "tracing",
  "uuid",
 ]

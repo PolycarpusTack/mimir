@@ -1,0 +1,11 @@
+{
+  "why_it_matters": "EU simulcast mandates for major sports events by 2027 create new regulatory compliance requirements for broadcasters using WHATS'ON. AirPlan scheduling and AirGuard compliance modules must support multi-platform simulcast workflows.",
+  "relevance_score": 68,
+  "affected_spokes": ["AirPlan", "AirGuard"],
+  "vendor_mentions": [],
+  "technology_terms": ["simulcast"],
+  "client_mentions": [],
+  "action_recommended": "Assess AirPlan and AirGuard regulatory compliance readiness for EU simulcast mandate",
+  "confidence_override": null,
+  "signal_type_override": null
+}

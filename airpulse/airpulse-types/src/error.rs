@@ -86,3 +86,53 @@ pub enum ApiError {
     #[error("Service unavailable: {0}")]
     ServiceUnavailable(String),
 }
+
+/// Errors from the enrichment pipeline (§6.2.2).
+#[derive(Debug, Error)]
+pub enum EnrichError {
+    #[error("Claude API error: HTTP {status} — {message}")]
+    ApiError { status: u16, message: String },
+
+    #[error("Rate limited — retry after {retry_after_secs}s")]
+    RateLimit { retry_after_secs: u64 },
+
+    #[error("Request timeout")]
+    Timeout,
+
+    #[error("Invalid JSON response: {parse_error} — raw: {raw}")]
+    InvalidJson { raw: String, parse_error: String },
+
+    #[error("Schema violation: field '{field}' — {reason}")]
+    SchemaViolation { field: String, reason: String },
+
+    #[error("Token budget exceeded: estimated {estimated}, budget {budget}")]
+    TokenBudgetExceeded { estimated: u32, budget: u32 },
+
+    #[error("Retries exhausted after {attempts} attempts: {last_error}")]
+    Retries {
+        attempts: u32,
+        last_error: Box<EnrichError>,
+    },
+
+    #[error("Redis error: {0}")]
+    Redis(String),
+
+    #[error("Store error: {0}")]
+    Store(String),
+
+    #[error("Queue error: {0}")]
+    Queue(String),
+}
+
+/// Errors from the baseline engine.
+#[derive(Debug, Error)]
+pub enum BaselineError {
+    #[error("Store error: {0}")]
+    StoreError(String),
+
+    #[error("Computation error: {0}")]
+    ComputationError(String),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+}

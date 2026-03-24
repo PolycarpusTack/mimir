@@ -1,0 +1,11 @@
+{
+  "why_it_matters": "SCTE-224 v2.1 standardises dynamic ad insertion signalling which directly impacts AirCast playout scheduling. MediaGenix must ensure WHATS'ON supports the updated DAI specification for broadcast clients.",
+  "relevance_score": 72,
+  "affected_spokes": ["AirCast"],
+  "vendor_mentions": [],
+  "technology_terms": ["SCTE-224", "DAI", "SSAI", "dynamic ad insertion"],
+  "client_mentions": [],
+  "action_recommended": "Review AirCast DAI support against SCTE-224 v2.1 draft",
+  "confidence_override": null,
+  "signal_type_override": null
+}

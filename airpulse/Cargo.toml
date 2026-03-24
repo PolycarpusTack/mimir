@@ -4,6 +4,8 @@ members = [
     "airpulse-ingest",
     "airpulse-classify",
     "airpulse-store",
+    "airpulse-enrich",
+    "airpulse-baseline",
     "airpulse-api",
 ]
 resolver = "2"

@@ -4,9 +4,11 @@
 //! typed query methods for the REST API layer.
 
 use airpulse_types::{
-    CircuitState, ClassifiedItem, Domain, FeedSource, KeywordHit, PollEvent, PropagandaRisk,
-    Signal, SignalPage, SignalQuery, SignalType, SourceTier, StoreError,
+    BaselineKey, CircuitState, ClassifiedItem, Domain, EnrichedAnnotation, EnrichmentCost,
+    FeedSource, KeywordHit, PollEvent, PropagandaRisk, ShiftAlert, ShiftSeverity, Signal,
+    SignalPage, SignalQuery, SignalType, SourceTier, StoreError, WelfordState,
 };
+use chrono::{DateTime, Utc};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -40,7 +42,7 @@ impl SignalStore {
         &self.pool
     }
 
-    /// Run migrations.
+    /// Run migrations (Phase 1 + Phase 2).
     pub async fn run_migrations(&self) -> Result<(), StoreError> {
         let schema_sql = include_str!("../migrations/V001__create_schema.sql");
         sqlx::raw_sql(schema_sql)
@@ -50,6 +52,31 @@ impl SignalStore {
 
         let seed_sql = include_str!("../migrations/V002__seed_sources.sql");
         sqlx::raw_sql(seed_sql)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        // Phase 2 migrations
+        let v003 = include_str!("../migrations/V003__add_enrichment_columns.sql");
+        sqlx::raw_sql(v003)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v004 = include_str!("../migrations/V004__create_baselines.sql");
+        sqlx::raw_sql(v004)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v005 = include_str!("../migrations/V005__create_shift_alerts.sql");
+        sqlx::raw_sql(v005)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        let v006 = include_str!("../migrations/V006__create_enrichment_costs.sql");
+        sqlx::raw_sql(v006)
             .execute(&self.pool)
             .await
             .map_err(|e| StoreError::Migration(e.to_string()))?;
@@ -398,6 +425,450 @@ impl SignalStore {
         Ok(())
     }
 
+    // -----------------------------------------------------------------------
+    // Phase 2: Enrichment store methods
+    // -----------------------------------------------------------------------
+
+    /// Update a signal with its enrichment annotation.
+    pub async fn update_signal_enrichment(
+        &self,
+        signal_id: Uuid,
+        annotation: &EnrichedAnnotation,
+    ) -> Result<(), StoreError> {
+        let annotation_json = serde_json::to_value(annotation)
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        sqlx::query(
+            r#"
+            UPDATE airpulse.signals
+            SET enriched_annotation = $2,
+                enriched_at = $3,
+                enriched = true,
+                relevance_score = $4
+            WHERE id = $1
+            "#,
+        )
+        .bind(signal_id)
+        .bind(&annotation_json)
+        .bind(annotation.enriched_at)
+        .bind(annotation.relevance_score)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Mark a signal as failed enrichment.
+    pub async fn mark_enrichment_failed(&self, signal_id: Uuid) -> Result<(), StoreError> {
+        sqlx::query(
+            r#"
+            UPDATE airpulse.signals
+            SET enrichment_failed = true,
+                enrichment_attempts = enrichment_attempts + 1
+            WHERE id = $1
+            "#,
+        )
+        .bind(signal_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Increment enrichment attempt counter.
+    pub async fn increment_enrichment_attempts(&self, signal_id: Uuid) -> Result<(), StoreError> {
+        sqlx::query(
+            r#"
+            UPDATE airpulse.signals
+            SET enrichment_attempts = enrichment_attempts + 1
+            WHERE id = $1
+            "#,
+        )
+        .bind(signal_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get the enrichment annotation for a signal.
+    pub async fn get_enrichment(
+        &self,
+        signal_id: Uuid,
+    ) -> Result<Option<EnrichedAnnotation>, StoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT enriched_annotation FROM airpulse.signals
+            WHERE id = $1 AND enriched = true
+            "#,
+        )
+        .bind(signal_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        match row {
+            Some(row) => {
+                let json: Option<serde_json::Value> = row.get("enriched_annotation");
+                match json {
+                    Some(v) => {
+                        let ann: EnrichedAnnotation = serde_json::from_value(v)
+                            .map_err(|e| StoreError::Database(e.to_string()))?;
+                        Ok(Some(ann))
+                    }
+                    None => Ok(None),
+                }
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Insert an enrichment cost record.
+    pub async fn insert_enrichment_cost(&self, cost: &EnrichmentCost) -> Result<(), StoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO airpulse.enrichment_costs
+                (id, signal_id, model, input_tokens, output_tokens, prompt_version, cached, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            "#,
+        )
+        .bind(cost.id)
+        .bind(cost.signal_id)
+        .bind(&cost.model)
+        .bind(cost.input_tokens as i32)
+        .bind(cost.output_tokens as i32)
+        .bind(&cost.prompt_version)
+        .bind(cost.cached)
+        .bind(cost.created_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get cost report grouped by domain and date.
+    pub async fn get_cost_report(
+        &self,
+        after: Option<DateTime<Utc>>,
+        before: Option<DateTime<Utc>>,
+        domain: Option<&str>,
+    ) -> Result<Vec<CostReportRow>, StoreError> {
+        let mut conditions: Vec<String> = Vec::new();
+        let mut param_idx = 0u32;
+
+        if after.is_some() {
+            param_idx += 1;
+            conditions.push(format!("ec.created_at > ${param_idx}"));
+        }
+        if before.is_some() {
+            param_idx += 1;
+            conditions.push(format!("ec.created_at < ${param_idx}"));
+        }
+        if domain.is_some() {
+            param_idx += 1;
+            conditions.push(format!("${param_idx} = ANY(s.domains)"));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!(
+            r#"
+            SELECT
+                DATE(ec.created_at) as cost_date,
+                ec.model,
+                SUM(ec.input_tokens) as total_input,
+                SUM(ec.output_tokens) as total_output,
+                COUNT(*) as call_count,
+                COUNT(*) FILTER (WHERE ec.cached) as cache_hits
+            FROM airpulse.enrichment_costs ec
+            JOIN airpulse.signals s ON s.id = ec.signal_id
+            {where_clause}
+            GROUP BY DATE(ec.created_at), ec.model
+            ORDER BY cost_date DESC
+            "#
+        );
+
+        let mut query = sqlx::query(&sql);
+        if let Some(a) = after {
+            query = query.bind(a);
+        }
+        if let Some(b) = before {
+            query = query.bind(b);
+        }
+        if let Some(d) = domain {
+            query = query.bind(d);
+        }
+
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in &rows {
+            results.push(CostReportRow {
+                date: row.get::<chrono::NaiveDate, _>("cost_date").to_string(),
+                model: row.get("model"),
+                total_input_tokens: row.get::<i64, _>("total_input") as u64,
+                total_output_tokens: row.get::<i64, _>("total_output") as u64,
+                call_count: row.get::<i64, _>("call_count") as u64,
+                cache_hits: row.get::<i64, _>("cache_hits") as u64,
+            });
+        }
+
+        Ok(results)
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 2: Baseline store methods
+    // -----------------------------------------------------------------------
+
+    /// Upsert a Welford baseline state.
+    pub async fn upsert_baseline(&self, state: &WelfordState) -> Result<(), StoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO airpulse.baselines (domain, signal_type, weekday, month, n, mean, m2, min_obs, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (domain, signal_type, weekday, month)
+            DO UPDATE SET n = $5, mean = $6, m2 = $7, min_obs = $8, updated_at = $9
+            "#,
+        )
+        .bind(state.key.domain.as_str())
+        .bind(state.key.signal_type.as_str())
+        .bind(state.key.weekday as i32)
+        .bind(state.key.month as i32)
+        .bind(state.n as i64)
+        .bind(state.mean)
+        .bind(state.m2)
+        .bind(state.min_obs as i64)
+        .bind(state.updated_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Get a baseline state by composite key.
+    pub async fn get_baseline(&self, key: &BaselineKey) -> Result<Option<WelfordState>, StoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT domain, signal_type, weekday, month, n, mean, m2, min_obs, updated_at
+            FROM airpulse.baselines
+            WHERE domain = $1 AND signal_type = $2 AND weekday = $3 AND month = $4
+            "#,
+        )
+        .bind(key.domain.as_str())
+        .bind(key.signal_type.as_str())
+        .bind(key.weekday as i32)
+        .bind(key.month as i32)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(WelfordState {
+                key: key.clone(),
+                n: row.get::<i64, _>("n") as u64,
+                mean: row.get("mean"),
+                m2: row.get("m2"),
+                min_obs: row.get::<i64, _>("min_obs") as u64,
+                updated_at: row.get("updated_at"),
+            })),
+            None => Ok(None),
+        }
+    }
+
+    /// Insert a shift alert.
+    pub async fn insert_shift_alert(&self, alert: &ShiftAlert) -> Result<(), StoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO airpulse.shift_alerts
+                (id, domain, signal_type, weekday, month, z_score, severity,
+                 observed, baseline_mean, baseline_std, signal_count, cooldown_until, fired_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            "#,
+        )
+        .bind(alert.id)
+        .bind(alert.key.domain.as_str())
+        .bind(alert.key.signal_type.as_str())
+        .bind(alert.key.weekday as i32)
+        .bind(alert.key.month as i32)
+        .bind(alert.z_score)
+        .bind(alert.severity.as_str())
+        .bind(alert.observed)
+        .bind(alert.baseline_mean)
+        .bind(alert.baseline_std)
+        .bind(alert.signal_count as i32)
+        .bind(alert.cooldown_until)
+        .bind(alert.fired_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// List active (unresolved) shift alerts with optional filters.
+    pub async fn list_active_shift_alerts(
+        &self,
+        domain: Option<&str>,
+        severity: Option<&str>,
+        after: Option<DateTime<Utc>>,
+    ) -> Result<Vec<ShiftAlert>, StoreError> {
+        let mut conditions = vec!["resolved_at IS NULL".to_string()];
+        let mut param_idx = 0u32;
+
+        if domain.is_some() {
+            param_idx += 1;
+            conditions.push(format!("domain = ${param_idx}"));
+        }
+        if severity.is_some() {
+            param_idx += 1;
+            conditions.push(format!("severity = ${param_idx}"));
+        }
+        if after.is_some() {
+            param_idx += 1;
+            conditions.push(format!("fired_at > ${param_idx}"));
+        }
+
+        let where_clause = format!("WHERE {}", conditions.join(" AND "));
+        let sql = format!(
+            "SELECT id, domain, signal_type, weekday, month, z_score, severity, \
+             observed, baseline_mean, baseline_std, signal_count, cooldown_until, \
+             fired_at, resolved_at \
+             FROM airpulse.shift_alerts {where_clause} ORDER BY fired_at DESC"
+        );
+
+        let mut query = sqlx::query(&sql);
+        if let Some(d) = domain {
+            query = query.bind(d);
+        }
+        if let Some(s) = severity {
+            query = query.bind(s);
+        }
+        if let Some(a) = after {
+            query = query.bind(a);
+        }
+
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        let mut alerts = Vec::with_capacity(rows.len());
+        for row in &rows {
+            alerts.push(row_to_shift_alert(row)?);
+        }
+
+        Ok(alerts)
+    }
+
+    /// Get a single shift alert by ID.
+    pub async fn get_shift_alert(&self, id: Uuid) -> Result<Option<ShiftAlert>, StoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, domain, signal_type, weekday, month, z_score, severity,
+                   observed, baseline_mean, baseline_std, signal_count, cooldown_until,
+                   fired_at, resolved_at
+            FROM airpulse.shift_alerts WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        match row {
+            Some(row) => Ok(Some(row_to_shift_alert(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Resolve (close) a shift alert.
+    pub async fn resolve_shift_alert(&self, id: Uuid) -> Result<(), StoreError> {
+        sqlx::query(
+            "UPDATE airpulse.shift_alerts SET resolved_at = NOW() WHERE id = $1",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Check if a cooldown is active for a given key+severity.
+    pub async fn is_alert_in_cooldown(
+        &self,
+        key: &BaselineKey,
+        severity: ShiftSeverity,
+    ) -> Result<bool, StoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT 1 FROM airpulse.shift_alerts
+            WHERE domain = $1 AND signal_type = $2 AND weekday = $3 AND month = $4
+              AND severity = $5 AND cooldown_until > NOW()
+            LIMIT 1
+            "#,
+        )
+        .bind(key.domain.as_str())
+        .bind(key.signal_type.as_str())
+        .bind(key.weekday as i32)
+        .bind(key.month as i32)
+        .bind(severity.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        Ok(row.is_some())
+    }
+
+    /// Count signals per (domain, signal_type) in a time window,
+    /// used by baseline tick to get observation values.
+    pub async fn count_signals_in_window(
+        &self,
+        since: DateTime<Utc>,
+        until: DateTime<Utc>,
+    ) -> Result<Vec<(Domain, SignalType, i64)>, StoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT unnest(domains) as domain, signal_type, COUNT(*) as cnt
+            FROM airpulse.signals
+            WHERE created_at >= $1 AND created_at < $2
+            GROUP BY domain, signal_type
+            "#,
+        )
+        .bind(since)
+        .bind(until)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| StoreError::Database(e.to_string()))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let domain_str: String = row.get("domain");
+            let signal_type_str: String = row.get("signal_type");
+            if let (Some(domain), Some(signal_type)) = (
+                Domain::from_str_loose(&domain_str),
+                SignalType::from_str_loose(&signal_type_str),
+            ) {
+                let cnt: i64 = row.get("cnt");
+                results.push((domain, signal_type, cnt));
+            }
+        }
+
+        Ok(results)
+    }
+
     /// Get keyword hits for a signal.
     async fn get_keyword_hits(&self, signal_id: Uuid) -> Result<Vec<KeywordHit>, StoreError> {
         let rows = sqlx::query(
@@ -490,6 +961,47 @@ impl SignalStore {
 
         Ok((row.get("total"), row.get("errors")))
     }
+}
+
+/// A row in the cost report.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CostReportRow {
+    pub date: String,
+    pub model: String,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+    pub call_count: u64,
+    pub cache_hits: u64,
+}
+
+fn row_to_shift_alert(row: &sqlx::postgres::PgRow) -> Result<ShiftAlert, StoreError> {
+    let domain_str: String = row.get("domain");
+    let signal_type_str: String = row.get("signal_type");
+    let severity_str: String = row.get("severity");
+
+    let domain = Domain::from_str_loose(&domain_str).unwrap_or(Domain::Broadcast);
+    let signal_type =
+        SignalType::from_str_loose(&signal_type_str).unwrap_or(SignalType::TechnologyAdoption);
+    let severity = ShiftSeverity::from_str_loose(&severity_str).unwrap_or(ShiftSeverity::Elevated);
+
+    Ok(ShiftAlert {
+        id: row.get("id"),
+        key: BaselineKey {
+            domain,
+            signal_type,
+            weekday: row.get::<i32, _>("weekday") as u8,
+            month: row.get::<i32, _>("month") as u8,
+        },
+        z_score: row.get("z_score"),
+        severity,
+        observed: row.get("observed"),
+        baseline_mean: row.get("baseline_mean"),
+        baseline_std: row.get("baseline_std"),
+        signal_count: row.get::<i32, _>("signal_count") as u32,
+        cooldown_until: row.get("cooldown_until"),
+        fired_at: row.get("fired_at"),
+        resolved_at: row.get("resolved_at"),
+    })
 }
 
 fn row_to_signal(

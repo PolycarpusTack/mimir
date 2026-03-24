@@ -1,0 +1,11 @@
+{
+  "why_it_matters": "Grass Valley's GenAI metadata tagging in AMPP directly competes with WHATS'ON's metadata management capabilities. This product launch signals accelerating AI adoption in broadcast workflows that MediaGenix must address in the AirBase roadmap.",
+  "relevance_score": 85,
+  "affected_spokes": ["AirBase", "AirForge"],
+  "vendor_mentions": ["Grass Valley"],
+  "technology_terms": ["GenAI", "AMPP", "metadata tagging"],
+  "client_mentions": [],
+  "action_recommended": "Evaluate competitive response for AirBase metadata capabilities",
+  "confidence_override": null,
+  "signal_type_override": null
+}

@@ -8,6 +8,8 @@ pub struct AirPulseConfig {
     pub database: DatabaseConfig,
     pub api: ApiConfig,
     pub circuit_breaker: CircuitBreakerConfig,
+    pub enrichment: EnrichmentConfig,
+    pub baseline: BaselineConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -101,6 +103,66 @@ impl Default for CircuitBreakerConfig {
     }
 }
 
+/// Enrichment pipeline configuration (Phase 2, §6.2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnrichmentConfig {
+    pub concurrency: usize,
+    pub max_requests_per_min: u32,
+    pub max_daily_tokens: u64,
+    pub cache_ttl_secs: u64,
+    pub api_timeout_secs: u64,
+    pub max_input_tokens: u32,
+    pub max_total_tokens: u32,
+    pub model: String,
+    pub prompt_version: String,
+}
+
+impl Default for EnrichmentConfig {
+    fn default() -> Self {
+        Self {
+            concurrency: 3,
+            max_requests_per_min: 60,
+            max_daily_tokens: 1_000_000,
+            cache_ttl_secs: 86400,
+            api_timeout_secs: 10,
+            max_input_tokens: 700,
+            max_total_tokens: 1500,
+            model: "claude-sonnet-4-6".to_string(),
+            prompt_version: "v2".to_string(),
+        }
+    }
+}
+
+/// Baseline engine configuration (Phase 2, §6.3.5).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BaselineConfig {
+    pub tick_interval_secs: u64,
+    pub min_observations: u64,
+    pub window_secs: u64,
+    pub z_elevated: f64,
+    pub z_spike: f64,
+    pub z_surge: f64,
+    pub cooldown_elevated_secs: u64,
+    pub cooldown_spike_secs: u64,
+    pub cooldown_surge_secs: u64,
+}
+
+impl Default for BaselineConfig {
+    fn default() -> Self {
+        Self {
+            tick_interval_secs: 300,
+            min_observations: 10,
+            window_secs: 300,
+            z_elevated: 1.5,
+            z_spike: 2.5,
+            z_surge: 3.5,
+            cooldown_elevated_secs: 7200,
+            cooldown_spike_secs: 14400,
+            cooldown_surge_secs: 28800,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,6 +178,16 @@ mod tests {
         assert_eq!(cfg.api.port, 8741);
         assert_eq!(cfg.circuit_breaker.failure_threshold, 5);
         assert_eq!(cfg.circuit_breaker.open_duration_secs, 300);
+        // Phase 2 defaults
+        assert_eq!(cfg.enrichment.concurrency, 3);
+        assert_eq!(cfg.enrichment.max_requests_per_min, 60);
+        assert_eq!(cfg.enrichment.max_daily_tokens, 1_000_000);
+        assert_eq!(cfg.enrichment.cache_ttl_secs, 86400);
+        assert_eq!(cfg.baseline.tick_interval_secs, 300);
+        assert_eq!(cfg.baseline.min_observations, 10);
+        assert_eq!(cfg.baseline.z_elevated, 1.5);
+        assert_eq!(cfg.baseline.z_spike, 2.5);
+        assert_eq!(cfg.baseline.z_surge, 3.5);
     }
 
     #[test]
