@@ -61,8 +61,8 @@ describe('TopBar', () => {
   });
 
   // TC-TB-005
-  it('has correct tab accessibility attributes', () => {
-    renderWithProviders(<TopBar />);
+  it('has correct tab accessibility attributes and passes axe audit', async () => {
+    const { container } = renderWithProviders(<TopBar />);
     const tablist = screen.getByRole('tablist');
     expect(tablist).toBeInTheDocument();
 
@@ -70,5 +70,14 @@ describe('TopBar', () => {
     expect(tabs).toHaveLength(3);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     expect(tabs[0]).toHaveAttribute('aria-controls', 'panel-shift');
+
+    // jest-axe accessibility check
+    const { axe } = await import('jest-axe');
+    // Exclude aria-valid-attr-value: panel IDs referenced by aria-controls exist
+    // in the RightPanel component, not co-located with TopBar in this unit test
+    const results = await axe(container, {
+      rules: { 'aria-valid-attr-value': { enabled: false } },
+    });
+    expect(results.violations).toHaveLength(0);
   });
 });

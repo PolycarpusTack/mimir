@@ -110,14 +110,4 @@ export const handlers = [
   http.get('/api/v1/stats', () => {
     return HttpResponse.json(FIXTURE_STATS);
   }),
-
-  // MSW-011: GET /api/v1/costs
-  http.get('/api/v1/costs', () => {
-    return HttpResponse.json({
-      rows: [],
-      total_input_tokens: 500000,
-      total_output_tokens: 340000,
-      total_calls: 1000,
-    });
-  }),
 ];

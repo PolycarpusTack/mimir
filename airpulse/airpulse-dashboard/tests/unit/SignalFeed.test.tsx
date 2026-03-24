@@ -83,6 +83,16 @@ describe('SignalFeed', () => {
     }
   });
 
+  // TC-SF-006
+  it('shows fresh indicator for recently fetched signals', async () => {
+    renderWithProviders(<SignalFeed />);
+    await waitFor(() => {
+      // sig-001 has fetched_at set to recent (< 2 min ago), so it should have a fresh indicator
+      const freshDots = screen.getAllByTestId('fresh-indicator');
+      expect(freshDots.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   // TC-SF-007
   it('displays relevance score in correct color', async () => {
     renderWithProviders(<SignalFeed />);

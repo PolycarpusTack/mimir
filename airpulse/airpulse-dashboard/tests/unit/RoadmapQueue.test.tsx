@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from './test-utils';
 import { RoadmapQueue } from '@/components/layout/RoadmapQueue';
 import { useUIStore } from '@/store/ui';
+import { server } from '../mocks/server';
+import { http, HttpResponse } from 'msw';
 
 afterEach(() => {
   useUIStore.setState({ queueExpanded: false });
@@ -70,5 +72,30 @@ describe('RoadmapQueue', () => {
     await user.keyboard('{Enter}');
 
     expect(useUIStore.getState().queueExpanded).toBe(true);
+  });
+
+  // TC-RQ-006
+  it('shows empty state when no signals meet relevance threshold', async () => {
+    useUIStore.setState({ queueExpanded: true });
+    server.use(
+      http.get('/api/v1/signals', () =>
+        HttpResponse.json({
+          items: [{
+            id: 'sig-low', source_id: 'src-001', url: 'https://example.com/low',
+            title: 'Low relevance signal', summary: null,
+            published_at: new Date().toISOString(), fetched_at: new Date().toISOString(),
+            content_hash: 'hashlow', domains: ['AI'], signal_type: 'ProductLaunch',
+            keyword_hits: [], confidence_score: 0.5, relevance_score: 40,
+            enriched: true, archived: false, created_at: new Date().toISOString(),
+          }],
+          total: 1, page: 1, page_size: 50,
+        }),
+      ),
+    );
+
+    renderWithProviders(<RoadmapQueue />);
+    await waitFor(() => {
+      expect(screen.getByText('No high-relevance signals pending')).toBeInTheDocument();
+    });
   });
 });

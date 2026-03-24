@@ -10,7 +10,7 @@ function classifyVelocity(delta: number, mentions7d: number): { label: Velocity;
   if (delta >= 30 && mentions7d >= 10) return { label: 'Surging', color: '#ff7b7b' };
   if (delta >= 50 && mentions7d < 10) return { label: 'Emerging', color: '#ffc95d' };
   if (delta >= 10 && delta < 30) return { label: 'Rising', color: '#5dde9f' };
-  if (delta > -10 && delta < 10) return { label: 'Stable', color: '#5dc8de' };
+  if (delta >= -10 && delta <= 10) return { label: 'Stable', color: '#5dc8de' };
   return { label: 'Declining', color: '#888' };
 }
 
